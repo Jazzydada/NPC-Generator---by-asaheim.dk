@@ -1,0 +1,1 @@
+"use client";import D from "@/components/DnDNpcGenerator";export default function P(){return(<div className="min-h-screen p-6"><D/></div>)}
