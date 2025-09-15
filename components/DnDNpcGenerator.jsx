@@ -1006,11 +1006,60 @@ function seedFromString(s = "") {
   return (h % 99999) + 1;
 }
 
+function raceDescriptor(race) {
+  const map = {
+    "Human": "ordinary human, medieval fantasy clothing",
+    "Half-Elf": "half elf half human, subtle pointed ears, graceful features",
+    "High Elf": "tall, slender elf, long pointed ears, elegant noble clothing, glowing presence",
+    "Wood Elf": "forest elf, green and brown clothing, natural camouflage, agile build",
+    "Dark Elf (Drow)": "dark-skinned elf, white hair, glowing red eyes, underdark attire",
+    "Mountain Dwarf": "short and stocky dwarf, thick beard, heavy armor, miner’s build",
+    "Hill Dwarf": "stout dwarf, ruddy complexion, braided beard, earthy clothing",
+    "Lightfoot Halfling": "small halfling, cheerful expression, curly hair, travel clothes",
+    "Stout Halfling": "short and sturdy halfling, round features, simple rustic attire",
+    "Forest Gnome": "tiny gnome, mischievous, bright eyes, woodland clothing",
+    "Rock Gnome": "small gnome, tinkerer, tools and gadgets, soot-stained clothes",
+    "Half-Orc": "tall and muscular, grey-green skin, tusks, tribal scars",
+    "Orc": "large brutish orc, green skin, tusks, muscular body, crude armor",
+    "Tiefling": "humanoid with horns, tail, unusual skin colors, glowing eyes",
+    "Dragonborn": "reptilian humanoid, dragon head, scales, muscular build, clawed hands",
+    "Aasimar": "radiant humanoid, glowing eyes, faint halo, angelic presence",
+    "Tabaxi": "humanoid feline, fur-covered body, cat head with whiskers, agile build",
+    "Tortle": "humanoid turtle, large shell, scaled skin, beak-like mouth",
+    "Kenku": "humanoid crow, black feathers, beak, cloaked in rags",
+    "Kobold": "small reptilian humanoid, scaly skin, sharp teeth, mischievous",
+    "Goliath": "giant humanoid, grey mottled skin, tribal tattoos, towering build",
+    "Firbolg": "tall giantkin, blue-grey skin, long ears, bovine nose, druidic clothing",
+    "Genasi (Air)": "humanoid infused with air, swirling hair like wind, glowing blue eyes",
+    "Genasi (Earth)": "stone-skinned humanoid, rocky features, moss or crystals growing on skin",
+    "Genasi (Fire)": "flame-haired humanoid, glowing eyes, skin like cooling lava",
+    "Genasi (Water)": "aquatic humanoid, flowing hair like water, blue-green skin",
+    "Loxodon": "elephant-headed humanoid, tusks, trunk, decorated robes",
+    "Leonin": "lion-headed humanoid, furred body, feline features, muscular warrior",
+    "Minotaur": "bull-headed humanoid, massive horns, muscular frame, tribal attire",
+    "Changeling": "pale shapeshifter, featureless face, shifting expressions",
+    "Shifter": "bestial humanoid, wolf-like or feline traits, glowing eyes, wild features",
+    "Warforged": "living construct, armored body, mechanical limbs, glowing core",
+    "Vedalken": "blue-skinned humanoid, hairless, intelligent and calm expression",
+    "Owlin": "owl-headed humanoid, feathered body, wings, large expressive eyes",
+    "Harengon": "rabbitfolk humanoid, long ears, fur-covered body, springy legs",
+    "Satyr": "goat-legged humanoid, horns, mischievous grin, pipes or lute",
+    "Triton": "amphibious humanoid, blue-green skin, webbed hands, finned head crest",
+    "Yuan-ti Pureblood": "serpentine humanoid, reptilian eyes, faint scales, sinister aura",
+    "Lizardfolk": "reptilian humanoid, scaled skin, crocodile-like features, primitive weapons",
+    "Bugbear": "large goblinoid, shaggy fur, long arms, menacing expression",
+    "Goblin": "small goblinoid, green skin, sharp teeth, mischievous grin",
+    "Hobgoblin": "taller goblinoid, orange skin, martial armor, disciplined stance",
+    "Kalashtar": "mystical humanoid, glowing eyes, ethereal aura, psychic presence",
+  };
+  return map[race] || race;
+}
+
 function buildMidjourneyPromptWeb(npc) {
   const genderOut = displayGenderFor(npc.race, npc.gender, t.en);
   const parts = [
     "fantasy character portrait, head & shoulders",
-    `${npc.race} from Dungeons & Dragons, ${genderOut} ${npc.profession}`,
+   `${raceDescriptor(npc.race)}, ${genderOut} ${npc.profession}`,
     `demeanor: ${npc.demeanor}`,
     `appearance details: ${npc.appearance}`,
     `voice: ${npc.voice}`, // merged
