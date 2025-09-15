@@ -9,7 +9,7 @@ import { Globe, Shuffle, Lock, Unlock, Copy, Download } from "lucide-react";
 const t = {
   en: {
     appTitle: "RPG NPC Generator",
-    subtitle: "Weighted races • 100 professions • 400 traits • Made by Asaheim.dk",
+    subtitle: "Weighted races • 100 professions • 400 traits • Made by",
     fields: {
       name: "Name",
       gender: "Gender",
@@ -37,7 +37,7 @@ const t = {
   },
   da: {
     appTitle: "RPG NPC Generator",
-    subtitle: "Vægtede racer • 100 professioner • 400 kendetegn • Lavet af Asaheim.dk",
+    subtitle: "Vægtede racer • 100 professioner • 400 karaktertræk • Lavet af",
     fields: {
       name: "Navn",
       gender: "Køn",
@@ -1341,7 +1341,17 @@ ${tr.fields.trait}: ${npc.trait}`;
           <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-400 to-purple-400 bg-clip-text text-transparent">
             {tr.appTitle}
           </h1>
-          <p className="text-slate-400">{tr.subtitle}</p>
+          <p className="text-sm text-muted-foreground">
+  {t[lang].subtitle}{" "}
+  <a
+    href="https://asaheim.dk"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="underline hover:no-underline"
+  >
+    asaheim.dk
+  </a>
+</p>
         </header>
 
         {/* Cards */}
