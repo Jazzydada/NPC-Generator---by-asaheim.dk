@@ -2,11 +2,12 @@
   "name": "npc-generator-weighted",
   "version": "10.2.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
+"scripts": {
+  "dev": "next dev",
+  "prebuild": "echo $(date +%s) > build-version.txt",
+  "build": "next build",
+  "start": "next start"
+},
   "dependencies": {
     "lucide-react": "^0.453.0",
     "next": "14.2.5",
