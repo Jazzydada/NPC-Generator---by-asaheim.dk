@@ -330,26 +330,206 @@ const APPEARANCE_DA = [
 ];
 
 // SPEECH + PITCH lister (bruges kun til at SAMMENSÆTTE 'voice')
-const SPEECH_EN = ["Nasal","Gruff","Whispers","Lisps","Deep Voice",
-    "High-Pitched","Sing-Song Voice","Raspy Voice","Soft Voice","Booming Voice",
-    "Mumbles","Stutters","Drawls","Fast-Talking","Slow and Measured",
-    "Laughs Often","Monotone","Hushed","Sings Words","Rhythmic",
-    "Broken Common","Heavy Accent","Slurs Words","Breathy","Sharp-Toned",
-    "Croaky","Melodic","Squeaky","Rolling R’s","Whiny",
-    "Choppy","Over-Enunciates","Drone-Like","Cracks Voice","Gravelly",
-    "Sings Randomly","Hums Between Words","Squeals on High Notes","Overdramatic","Flirtatious",
-    "Guttural","Muttering","Sarcastic Tone","Soothing","Commanding",
-    "Shaky","Mocking","Deep Growl","Rumbles","Chanting",];
-const SPEECH_DA = ["Næsetone","Hæs","Hviskende","Lispende","Dyb stemme",
-    "Lys stemme","Syngende","Raspet","Blød stemme","Buldrende stemme",
-    "Mumler","Stammer","Trækker ordene ud","Snakker hurtigt","Taler langsomt og afmålt",
-    "Griner ofte","Monoton","Dæmpet","Synger ordene","Rytmisk",
-    "Brudt fællesmål","Tung accent","Snøvler","Åndende","Skarp tone",
-    "Kroget stemme","Melodisk","Pivende","Ruller på r’erne","Klynkende",
-    "Hakkende tale","Overartikulerer","Dronende","Knækker i stemmen","Gruset",
-    "Bryder ud i sang","Nynner mellem ord","Hviner i høje toner","Overdrevent dramatisk","Flirtende",
-    "Gutturalt","Mumler","Sarkastisk tone","Beroligende","Kommandoagtig",
-    "Rystende","Spottende","Dyb brummen","Rumlende","Messende",];
+const SPEECH_EN = [ "Deep and rumbling",
+  "Low and gravelly",
+  "Dark and smoky",
+  "Chest-deep resonance",
+  "Guttural growl",
+  "Rough and raspy",
+  "Husky whisper",
+  "Mid-range steady",
+  "Clear and even",
+  "Metallic twang",
+  "Sharp-edged tone",
+  "Thin and reedy",
+  "Nasal buzz",
+  "Croaky and strained",
+  "Hoarse with cracks",
+  "Whispery breath",
+  "High-pitched squeak",
+  "Shrill and piercing",
+  "Bright and bell-like",
+  "Childlike lilt",
+  "Falsetto breaks",
+  "Squeaky cartoonish",
+  "Melodic clarity",
+  "Singing tone",
+  "Angelic high timbre",
+  "Monotone flatness",
+  "Rising intonation",
+  "Falling intonation",
+  "Rolling singsong",
+  "Overdramatic flourishes",
+  "Sarcastic bite",
+  "Mocking lilt",
+  "Whining drone",
+  "Flirtatious lilt",
+  "Soothing lull",
+  "Commanding bark",
+  "Sharp and clipped",
+  "Gentle coaxing",
+  "Suspicious drawl",
+  "Playful bouncing tone",
+  "Melancholic fall",
+  "Angry snap",
+  "Joyful sing-song",
+  "Creeping menace",
+  "Echoing chant",
+  "Cold detachment",
+  "Cheerful rise-and-fall",
+  "Melodramatic sighs",
+  "Intense whisper",
+  "Warm storyteller tone",
+  "Rapid-fire chatter",
+  "Fast with sudden pauses",
+  "Staccato bursts",
+  "Slow and deliberate",
+  "Drawling stretches",
+  "Hiccuping rhythm",
+  "Choppy and broken",
+  "Over-enunciated",
+  "Slurred and lazy",
+  "Rolling syllables",
+  "Drone-like chant",
+  "Chanting cadence",
+  "Breath between every word",
+  "Hums between phrases",
+  "Giggles while speaking",
+  "Laughs between words",
+  "Pauses dramatically mid-sentence",
+  "Trails off at endings",
+  "Climbs louder and louder",
+  "Drops to near silence",
+  "Bursts into random singing",
+  "Squeals on high notes",
+  "Overlaps words nervously",
+  "Mutters constantly",
+  "Sings rhythm into sentences",
+  "Rolling R’s",
+  "Lisping S’s",
+  "Stutters on consonants",
+  "Slurs vowels",
+  "Breathes heavily while speaking",
+  "Croons like a bard",
+  "Mocking mimicry",
+  "Echoing voice",
+  "Crackling like thunder",
+  "Whispery hiss",
+  "Growling undertone",
+  "Shaky tremor",
+  "Overconfident boom",
+  "Chant-like rhythm",
+  "Prays while speaking",
+  "Melts into sighs",
+  "Sudden squeals of laughter",
+  "Hissing sibilants",
+  "Whisper-singing",
+  "Stilted formal diction",
+  "Overly theatrical",
+  "Mournful wail",
+  "Breathless urgency",
+  "Drone with no emotion",
+  "Shifting pitch",];
+const SPEECH_DA = ["Dyb og rumlende",
+  "Lav og grynet",
+  "Mørk og røgfyldt",
+  "Brystdyb resonans",
+  "Gutturalt brøl",
+  "Rå og hæs",
+  "Husky hvisken",
+  "Mellemleje stabil",
+  "Klar og jævn",
+  "Metallisk klang",
+  "Skarp tone",
+  "Tynd og pibende",
+  "Nasal summen",
+  "Kroget og anstrengt",
+  "Hæs med stemmebrud",
+  "Hviskende åndedræt",
+  "Høj, pibende",
+  "Skrattende og gennemtrængende",
+  "Lys og klokkerent",
+  "Barnlig tone",
+  "Falsetbrud",
+  "Knasende tegneserieagtig",
+  "Melodisk klarhed",
+  "Syngende tone",
+  "Engleagtig lys klang",
+  "Monoton fladhed",
+  "Stigende tonefald",
+  "Faldende tonefald",
+  "Syngende rytme",
+  "Overdrevent dramatisk",
+  "Sarkastisk bid",
+  "Hånlig tone",
+  "Klynkende drone",
+  "Flirtende tone",
+  "Beredende vuggesang",
+  "Befalende gøen",
+  "Skarp og afklippet",
+  "Blid lokken",
+  "Mistænksom drawl",
+  "Legende tone",
+  "Melankolsk fald",
+  "Vredt knæk",
+  "Glad og syngende",
+  "Krybende truende",
+  "Ekkoagtig sang",
+  "Kold afstand",
+  "Muntert op og ned",
+  "Melodramatiske suk",
+  "Intens hvisken",
+  "Varm fortællerstemme",
+  "Hurtig ordstrøm",
+  "Hurtig med pludselige pauser",
+  "Staccato udbrud",
+  "Langsom og afmålt",
+  "Trækkende stræk",
+  "Hikkende rytme",
+  "Hakket og brudt",
+  "Overartikuleret",
+  "Sløret og doven",
+  "Rullende stavelser",
+  "Dronende sang",
+  "Messende kadence",
+  "Ånder mellem hvert ord",
+  "Hummer mellem fraser",
+  "Fniser mens de taler",
+  "Griner mellem ord",
+  "Dramatiske pauser midt i sætninger",
+  "Fader ud ved slutninger",
+  "Bliver højere og højere",
+  "Falder til næsten stilhed",
+  "Bryder ud i tilfældig sang",
+  "Piber på høje toner",
+  "Overlapper ord nervøst",
+  "Mumler konstant",
+  "Synger rytme ind i sætninger",
+  "Rullende R’er",
+  "Læspende S’er",
+  "Stammer på konsonanter",
+  "Slører vokaler",
+  "Ånder tungt mens de taler",
+  "Synger som en trubadur",
+  "Hånende efterligning",
+  "Ekkoagtig stemme",
+  "Knitrende som torden",
+  "Hvislende hvisken",
+  "Brummende undertone",
+  "Rystende vibrato",
+  "Overkonfident brag",
+  "Messende rytme",
+  "Beder mens de taler",
+  "Smelter ind i suk",
+  "Pludselige latterudbrud",
+  "Hvislende s-lyde",
+  "Hviske-synger",
+  "Stiv og formel diktion",
+  "Alt for teatralsk",
+  "Sørgmodigt jamren",
+  "Forpustet hastværk",
+  "Dronende uden følelser",
+  "Skiftende tonehøjde",];
 const PITCH_EN = ["Always whispering","Constantly shouting","Speaks in riddles","Misuses proverbs at odd times","Stutters","Overlong vowels (‘I thiiiink…’)","Hoarse voice","Nasal tone","Clips off words","Talks very quickly",
   "Talks painfully slowly","Speaks in rhyme","Talks in third person","Calls everyone ‘my friend’","Shrill, hysterical laugh","Tears up mid-sentence","Nervous giggle","Singsong dialect","Slips into another language","Heavy foreign accent",
   "Echoes others’ last words","Wildly mixed metaphors","Interrupts self with curses","Utterly monotone","Animal noises between words","Starts every sentence with ‘Well…’","Constant interrupter","Says ‘uh’ every other word","Uses fancy words wrong","Obsessed with old sayings",
@@ -1111,20 +1291,19 @@ function getTables(lang) {
   };
 }
 
-// Oversæt "voice" ved sprogskift (format: "<pitch> • <speech>")
+// Oversæt "voice" ved sprogskift (format: "<speech> • <pitch>")
 function translateVoice(voice, fromPitch, toPitch, fromSpeech, toSpeech) {
   if (!voice) return voice;
-  const [pitchPart, speechPart] = voice.split(" • ").map(s => s?.trim());
+  const [speechPart, pitchPart] = voice.split(" • ").map(s => s?.trim());
   const mapOne = (val, fromArr, toArr) => {
     const i = fromArr.indexOf(val);
     if (i !== -1 && i < toArr.length) return toArr[i];
-    // hvis allerede i mål-sprog, behold
-    if (toArr.includes(val)) return val;
+    if (toArr.includes(val)) return val; // hvis allerede i mål-sprog
     return val;
   };
-  const newPitch  = mapOne(pitchPart,  fromPitch,  toPitch);
   const newSpeech = mapOne(speechPart, fromSpeech, toSpeech);
-  return `${newPitch} • ${newSpeech}`;
+  const newPitch  = mapOne(pitchPart,  fromPitch,  toPitch);
+  return `${newSpeech} • ${newPitch}`;
 }
 
 function translateValue(val, fromArr, toArr) {
@@ -1141,10 +1320,11 @@ function translateValue(val, fromArr, toArr) {
 function useNPC() {
   const [npc, setNpc] = useState(null);
 
+  // Byg voice som: "speech • pitch"
   const buildVoice = (tables) => {
-    const p = roll(tables.pitch);
     const s = roll(tables.speech);
-    return `${p} • ${s}`;
+    const p = roll(tables.pitch);
+    return `${s} • ${p}`;
   };
 
   const rerollAll = (locks, tables) => {
@@ -1157,7 +1337,7 @@ function useNPC() {
         race,
         profession: locks?.profession && prev ? prev.profession : roll(tables.professions),
         appearance: locks?.appearance && prev ? prev.appearance : roll(tables.appearances),
-        voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),  // merged
+        voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),  // ✅ bruger argumentet
         movement:   locks?.movement   && prev ? prev.movement   : roll(tables.movement),
         demeanor:   locks?.demeanor   && prev ? prev.demeanor   : roll(tables.demeanor),
         persona:    locks?.persona    && prev ? prev.persona    : roll(tables.persona),
@@ -1180,7 +1360,7 @@ function useNPC() {
       } else if (fieldKey === "name") {
         next.name = generateName(prev.race, prev.gender);
       } else if (fieldKey === "voice") {
-        next.voice = `${roll(tables.pitch)} • ${roll(tables.speech)}`;
+        next.voice = buildVoice(tables); // ✅ ét sted at styre formatet
       } else {
         const source = {
           profession: tables.professions,
@@ -1224,7 +1404,7 @@ export default function DnDNpcGenerator() {
       race,
       profession: roll(tables.professions),
       appearance: roll(tables.appearances),
-      voice: `${roll(tables.pitch)} • ${roll(tables.speech)}`,
+    voice: `${roll(tables.speech)} • ${roll(tables.pitch)}`,
       movement: roll(tables.movement),
       demeanor: roll(tables.demeanor),
       name: generateName(race, gender),
