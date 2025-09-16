@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
-import { Globe, Shuffle, Lock, Unlock, Copy, Download } from "lucide-react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { Globe, Shuffle, Lock, Unlock, Copy, Download, Undo as UndoIcon, Redo as RedoIcon } from "lucide-react";
 
 /** =========================================================
  *  i18n (EN/DA)
@@ -9,7 +9,7 @@ import { Globe, Shuffle, Lock, Unlock, Copy, Download } from "lucide-react";
 const t = {
   en: {
     appTitle: "RPG NPC Generator",
-    subtitle: "Weighted races • 100 professions • 400 traits • Made by",
+    subtitle: "Weighted races • 100 professions • 700 traits • Made by",
     fields: {
       name: "Name",
       gender: "Gender",
@@ -23,21 +23,21 @@ const t = {
       trait: "Trait",
     },
     buttons: {
-      roll: "Roll!",
-      lockAll: "Lock All",
-      unlockAll: "Unlock All",
-      copyText: "Copy (text)",
-      copyJson: "Copy (JSON)",
-      copyMJ: "Copy (Midjourney Web)",
-      rollOne: "reroll",       // per-field reroll
-    },
+  roll: "Roll!",
+  lockAll: "Lock All",
+  unlockAll: "Unlock All",
+  copyText: "Copy (text)",
+  copyJson: "Copy (JSON)",
+  copyMJ: "Copy (Midjourney Web)",
+  rollOne: "Reroll" // <- add this
+},
     outputTitle: "Output",
     genderUnrevealed: "Unrevealed",
     common: { lock: "Lock", locked: "Locked", locksLabel: "Locks:" },
   },
   da: {
     appTitle: "RPG NPC Generator",
-    subtitle: "Vægtede racer • 100 professioner • 400 karaktertræk • Lavet af",
+    subtitle: "Vægtede racer • 100 professioner • 700 karaktertræk • Lavet af",
     fields: {
       name: "Navn",
       gender: "Køn",
@@ -1273,39 +1273,38 @@ function getTables(lang) {
 function translateVoice(voice, fromPitch, toPitch, fromSpeech, toSpeech) {
   if (!voice) return voice;
 
-  // Split robust: tillad enten " • " eller bare mellemrum som separator
-  // Vi splitter kun i 2 dele: første match = speech, resten = pitch
-  let speechPart = "";
-  let pitchPart  = "";
-
+  // 1) Prøv legacy-delimiter først for bagudkompatibilitet
   if (voice.includes(" • ")) {
-    [speechPart, pitchPart] = voice.split(" • ");
-  } else {
-    // fallback: split ved første mellemrum, så vi får to felter
-    const idx = voice.indexOf(" ");
-    if (idx === -1) {
-      speechPart = voice.trim();
-      pitchPart  = "";
-    } else {
-      speechPart = voice.slice(0, idx).trim();
-      pitchPart  = voice.slice(idx + 1).trim();
+    const [speechPart, pitchPart] = voice.split(" • ");
+    return [
+      translateValue(speechPart, fromSpeech, toSpeech),
+      translateValue(pitchPart,  fromPitch,  toPitch),
+    ].filter(Boolean).join(" ");
+  }
+
+  // 2) Robust uden delimiter:
+  // Find den længste pitch i fromPitch der matcher som SUFFIX
+  let matchedPitch = "";
+  for (const p of [...fromPitch].sort((a,b) => b.length - a.length)) {
+    if (voice.endsWith(p)) { matchedPitch = p; break; }
+  }
+
+  let speechPart = voice;
+  let pitchPart  = "";
+  if (matchedPitch) {
+    pitchPart  = matchedPitch;
+    speechPart = voice.slice(0, voice.length - matchedPitch.length).trim();
+    // Fjern evt. ekstra mellemrum før pitch
+    if (speechPart.endsWith(",") || speechPart.endsWith(";")) {
+      speechPart = speechPart.slice(0, -1).trim();
     }
   }
 
-  const mapOne = (val, fromArr, toArr) => {
-    const i = fromArr.indexOf(val);
-    if (i !== -1 && i < toArr.length) return toArr[i];
-    if (toArr.includes(val)) return val;
-    return val;
-    };
+  const newSpeech = translateValue(speechPart, fromSpeech, toSpeech);
+  const newPitch  = translateValue(pitchPart,  fromPitch,  toPitch);
 
-  const newSpeech = mapOne(speechPart, fromSpeech, toSpeech);
-  const newPitch  = mapOne(pitchPart,  fromPitch,  toPitch);
-
-  // Saml uden separator-tegn
   return [newSpeech, newPitch].filter(Boolean).join(" ");
 }
-
 function translateValue(val, fromArr, toArr) {
   if (!val) return val;
   const i = fromArr.indexOf(val);
@@ -1318,65 +1317,122 @@ function translateValue(val, fromArr, toArr) {
  *  State hooks
  * ======================================================= */
 function useNPC() {
-  const [npc, setNpc] = useState(null);
+  const [history, setHistory] = useState([]);
+const [currentIndex, setCurrentIndex] = useState(-1);
 
-// Byg voice som: "speech pitch" (uden separator-tegn)
-const buildVoice = (tables) => {
-  const s = roll(tables.speech);
-  const p = roll(tables.pitch);
-  return `${s} ${p}`;
-};
+useEffect(() => {
+  if (history.length === 0) {
+    const tables = getTables("da");
+    const buildVoiceInit = () => {
+      const s = roll(tables.speech);
+      const p = roll(tables.pitch);
+      return `${s} ${p}`;
+    };
+    const seed = {
+      name:       generateName("Human", "Male"),
+      gender:     weightedGender(),
+      race:       weightedRoll(races, raceWeights),
+      profession: roll(tables.professions),
+      appearance: roll(tables.appearances),
+      voice:      buildVoiceInit(),
+      movement:   roll(tables.movement),
+      demeanor:   roll(tables.demeanor),
+      persona:    roll(tables.persona),
+      trait:      roll(tables.trait),
+    };
+    setHistory([seed]);
+    setCurrentIndex(0);
+  }
+}, [history.length]);
+
+  const npc = history[currentIndex] || null;
+  const canUndo = currentIndex > 0;
+  const canRedo = currentIndex < history.length - 1;
+
+  const push = (next) => {
+    setHistory((h) => {
+      const trimmed = h.slice(0, currentIndex + 1);
+      return [...trimmed, next];
+    });
+    setCurrentIndex((i) => i + 1);
+  };
+
+  const buildVoice = (tables) => {
+    const s = roll(tables.speech);
+    const p = roll(tables.pitch);
+    return `${s} ${p}`;
+  };
+
+  const generateAll = (locks, tables, prev) => {
+    const gender = locks?.gender && prev ? prev.gender : weightedGender();
+    const race   = locks?.race   && prev ? prev.race   : weightedRoll(races, raceWeights);
+    return {
+      name:       locks?.name       && prev ? prev.name       : generateName(race, gender),
+      gender,
+      race,
+      profession: locks?.profession && prev ? prev.profession : roll(tables.professions),
+      appearance: locks?.appearance && prev ? prev.appearance : roll(tables.appearances),
+      voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),
+      movement:   locks?.movement   && prev ? prev.movement   : roll(tables.movement),
+      demeanor:   locks?.demeanor   && prev ? prev.demeanor   : roll(tables.demeanor),
+      persona:    locks?.persona    && prev ? prev.persona    : roll(tables.persona),
+      trait:      locks?.trait      && prev ? prev.trait      : roll(tables.trait),
+    };
+  };
 
   const rerollAll = (locks, tables) => {
-    setNpc((prev) => {
-      const gender = locks?.gender && prev ? prev.gender : weightedGender();
-      const race   = locks?.race   && prev ? prev.race   : weightedRoll(races, raceWeights);
-      return {
-        name:       locks?.name       && prev ? prev.name       : generateName(race, gender),
-        gender,
-        race,
-        profession: locks?.profession && prev ? prev.profession : roll(tables.professions),
-        appearance: locks?.appearance && prev ? prev.appearance : roll(tables.appearances),
-        voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),  // ✅ bruger argumentet
-        movement:   locks?.movement   && prev ? prev.movement   : roll(tables.movement),
-        demeanor:   locks?.demeanor   && prev ? prev.demeanor   : roll(tables.demeanor),
-        persona:    locks?.persona    && prev ? prev.persona    : roll(tables.persona),
-        trait:      locks?.trait      && prev ? prev.trait      : roll(tables.trait),
-      };
-    });
+    const next = generateAll(locks, tables, npc);
+    push(next);
   };
 
   const rerollField = (fieldKey, locks, tables) => {
-    setNpc(prev => {
-      if (!prev) return prev;
-      if (locks?.[fieldKey]) return prev;
-      const next = { ...prev };
-      if (fieldKey === "gender") {
-        next.gender = weightedGender();
-        if (!locks?.name) next.name = generateName(next.race, next.gender);
-      } else if (fieldKey === "race") {
-        next.race = weightedRoll(races, raceWeights);
-        if (!locks?.name) next.name = generateName(next.race, next.gender);
-      } else if (fieldKey === "name") {
-        next.name = generateName(prev.race, prev.gender);
-      } else if (fieldKey === "voice") {
-        next.voice = buildVoice(tables); // ✅ ét sted at styre formatet
-      } else {
-        const source = {
-          profession: tables.professions,
-          appearance: tables.appearances,
-          movement:   tables.movement,
-          demeanor:   tables.demeanor,
-          persona:    tables.persona,
-          trait:      tables.trait,
-        }[fieldKey];
-        if (Array.isArray(source)) next[fieldKey] = roll(source);
-      }
-      return next;
-    });
+    const prev = npc;
+    if (!prev) return;
+    if (locks?.[fieldKey]) return;
+
+    const next = { ...prev };
+    if (fieldKey === "gender") {
+      next.gender = weightedGender();
+      if (!locks?.name) next.name = generateName(next.race, next.gender);
+    } else if (fieldKey === "race") {
+      next.race = weightedRoll(races, raceWeights);
+      if (!locks?.name) next.name = generateName(next.race, next.gender);
+    } else if (fieldKey === "name") {
+      next.name = generateName(prev.race, prev.gender);
+    } else if (fieldKey === "voice") {
+      next.voice = buildVoice(tables);
+    } else {
+      const source = {
+        profession: tables.professions,
+        appearance: tables.appearances,
+        movement:   tables.movement,
+        demeanor:   tables.demeanor,
+        persona:    tables.persona,
+        trait:      tables.trait,
+      }[fieldKey];
+      if (Array.isArray(source)) next[fieldKey] = roll(source);
+    }
+    push(next);
   };
 
-  return { npc, setNpc, rerollAll, rerollField, buildVoice };
+  const undo = () => { if (canUndo) setCurrentIndex((i) => i - 1); };
+  const redo = () => { if (canRedo) setCurrentIndex((i) => i + 1); };
+
+  const replaceCurrent = useCallback((updater) => {
+  setHistory((h) => {
+    if (h.length === 0 || currentIndex < 0) return h;
+    const curr = h[currentIndex];
+    const next = typeof updater === "function" ? updater(curr) : updater;
+    const copy = h.slice();
+    copy[currentIndex] = next;
+    return copy;
+  });
+}, [currentIndex]);
+
+  // Første NPC
+
+
+ return { npc, rerollAll, rerollField, undo, redo, canUndo, canRedo, replaceCurrent };
 }
 
 /** =========================================================
@@ -1392,71 +1448,54 @@ export default function DnDNpcGenerator() {
     persona: false, trait: false,
   });
 
-  const { npc, setNpc, rerollAll, rerollField } = useNPC();
+  const { npc, rerollAll, rerollField, undo, redo, canUndo, canRedo, replaceCurrent } = useNPC();
 
-  // Første NPC efter mount
-  useEffect(() => {
-    if (npc) return;
-    const gender = weightedGender();
-    const race = weightedRoll(races, raceWeights);
-    setNpc({
-      gender,
-      race,
-      profession: roll(tables.professions),
-      appearance: roll(tables.appearances),
-    voice: `${roll(tables.speech)} ${roll(tables.pitch)}`,
-      movement: roll(tables.movement),
-      demeanor: roll(tables.demeanor),
-      name: generateName(race, gender),
-      persona: roll(tables.persona),
-      trait:   roll(tables.trait),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [npc]);
 
-  // Sprogskift: oversæt eksisterende felter (respekter locks)
-  const prevLangRef = useRef(lang);
-  useEffect(() => {
-    if (!npc) return;
-    if (prevLangRef.current === lang) return;
+
 
    // Sprogskift: byg kilde-tabeller fra forrige sprog
-const fromTables =
-  prevLangRef.current === "da"
-    ? {
-        professions: PROFESSIONS_DA,
-        appearances: APPEARANCE_DA,
-        movement:    MOVEMENT_DA,
-        demeanor:    DEMEANOR_DA,
-        persona:     PERSONA_DA,   // <-- vigtigt
-        trait:       TRAIT_DA,     // <-- vigtigt
-        speech:      SPEECH_DA,
-        pitch:       PITCH_DA,
-      }
-    : {
-        professions: PROFESSIONS_EN,
-        appearances: APPEARANCE_EN,
-        movement:    MOVEMENT_EN,
-        demeanor:    DEMEANOR_EN,
-        persona:     PERSONA_EN,   // <-- vigtigt
-        trait:       TRAIT_EN,     // <-- vigtigt
-        speech:      SPEECH_EN,
-        pitch:       PITCH_EN,
-      };
+const prevLangRef = useRef(lang);
+useEffect(() => {
+  if (!npc) return;
+  if (prevLangRef.current === lang) return;
 
-    setNpc(prev => ({
-      ...prev,
-      profession: locks.profession ? prev.profession : translateValue(prev.profession, fromTables.professions, tables.professions),
-      appearance: locks.appearance ? prev.appearance : translateValue(prev.appearance, fromTables.appearances, tables.appearances),
-      movement:   locks.movement   ? prev.movement   : translateValue(prev.movement,   fromTables.movement,   tables.movement),
-      demeanor:   locks.demeanor   ? prev.demeanor   : translateValue(prev.demeanor,   fromTables.demeanor,   tables.demeanor),
-      persona:    locks.persona    ? prev.persona    : translateValue(prev.persona,    fromTables.persona,    tables.persona),
-      trait:      locks.trait      ? prev.trait      : translateValue(prev.trait,      fromTables.trait,      tables.trait),
-      voice:      locks.voice      ? prev.voice      : translateVoice(prev.voice, fromTables.pitch, tables.pitch, fromTables.speech, tables.speech),
-    }));
+  const fromTables =
+    prevLangRef.current === "da"
+      ? {
+          professions: PROFESSIONS_DA,
+          appearances: APPEARANCE_DA,
+          movement:    MOVEMENT_DA,
+          demeanor:    DEMEANOR_DA,
+          persona:     PERSONA_DA,
+          trait:       TRAIT_DA,
+          speech:      SPEECH_DA,
+          pitch:       PITCH_DA,
+        }
+      : {
+          professions: PROFESSIONS_EN,
+          appearances: APPEARANCE_EN,
+          movement:    MOVEMENT_EN,
+          demeanor:    DEMEANOR_EN,
+          persona:     PERSONA_EN,
+          trait:       TRAIT_EN,
+          speech:      SPEECH_EN,
+          pitch:       PITCH_EN,
+        };
 
-    prevLangRef.current = lang;
-  }, [lang, tables, locks, npc, setNpc]);
+  const updated = {
+    ...npc,
+    profession: locks.profession ? npc.profession : translateValue(npc.profession, fromTables.professions, tables.professions),
+    appearance: locks.appearance ? npc.appearance : translateValue(npc.appearance, fromTables.appearances, tables.appearances),
+    movement:   locks.movement   ? npc.movement   : translateValue(npc.movement,   fromTables.movement,   tables.movement),
+    demeanor:   locks.demeanor   ? npc.demeanor   : translateValue(npc.demeanor,   fromTables.demeanor,   tables.demeanor),
+    persona:    locks.persona    ? npc.persona    : translateValue(npc.persona,    fromTables.persona,    tables.persona),
+    trait:      locks.trait      ? npc.trait      : translateValue(npc.trait,      fromTables.trait,      tables.trait),
+    voice:      locks.voice      ? npc.voice      : translateVoice(npc.voice, fromTables.pitch, tables.pitch, fromTables.speech, tables.speech),
+  };
+
+  replaceCurrent(updated);
+  prevLangRef.current = lang;
+}, [lang, npc, replaceCurrent]);
 
   const textOut = useMemo(() => {
     if (!npc) return "";
@@ -1572,6 +1611,25 @@ ${tr.fields.trait}: ${npc.trait}`;
             </button>
           </div>
 
+          <div className="mt-3 flex justify-center gap-3">
+  <button
+    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+    onClick={undo}
+    disabled={!canUndo}
+  >
+    <UndoIcon className="w-4 h-4 inline mr-1" />
+    {lang === "da" ? "Fortryd" : "Undo"}
+  </button>
+  <button
+    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+    onClick={redo}
+    disabled={!canRedo}
+  >
+    <RedoIcon className="w-4 h-4 inline mr-1" />
+    {lang === "da" ? "Gendan" : "Redo"}
+  </button>
+</div>
+
           <div className="flex flex-wrap justify-center gap-3">
             <button
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors duration-200"
@@ -1654,12 +1712,12 @@ function FieldCard({ label, value, locked, onLock, onReroll, tr }) {
             {locked ? (
               <>
                 <Lock className="w-3 h-3 inline mr-1" />
-                {t.en.common.locked && tr.common.locked}
+                {tr.common.locked}
               </>
             ) : (
               <>
                 <Unlock className="w-3 h-3 inline mr-1" />
-                {t.en.common.lock && tr.common.lock}
+                {tr.common.lock}
               </>
             )}
           </button>
