@@ -3,8 +3,9 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Globe, Shuffle, Lock, Unlock, Copy, Download, Undo as UndoIcon, Redo as RedoIcon } from "lucide-react";
 
+
 /** =========================================================
- *  i18n (EN/DA)
+ *  i18n (EN/DA) — FIXED
  * ======================================================= */
 const t = {
   en: {
@@ -16,35 +17,37 @@ const t = {
       race: "Race",
       profession: "Profession",
       appearance: "Appearance",
-      voice: "Voice",          // <- merged Speech + Pitch
+      voice: "Voice",
       movement: "Movement",
       demeanor: "Demeanor",
       persona: "Persona",
       trait: "Trait",
     },
     buttons: {
-  roll: "Roll!",
-  lockAll: "Lock All",
-  unlockAll: "Unlock All",
-  copyText: "Copy (text)",
-  copyJson: "Copy (JSON)",
-  copyMJ: "Copy (Midjourney Web)",
-  rollOne: "Reroll" // <- add this
-},
+      roll: "Roll!",
+      lockAll: "Lock All",
+      unlockAll: "Unlock All",
+      copyText: "Copy (text)",
+      copyMJ: "Copy (Midjourney Web)",
+      perchance: "Copy (Perchance)",
+      perchanceEmbedToggle: "Show Perchance in app",
+      rollOne: "Reroll",
+    },
     outputTitle: "Output",
     genderUnrevealed: "Unrevealed",
     common: { lock: "Lock", locked: "Locked", locksLabel: "Locks:" },
   },
+
   da: {
     appTitle: "RPG NPC Generator",
-    subtitle: "Vægtede racer • 100 professioner • 700 karaktertræk • Lavet af",
+    subtitle: "Vægtede racer • 100 professioner • 700 kendetegn • Lavet af",
     fields: {
       name: "Navn",
       gender: "Køn",
       race: "Race",
       profession: "Profession",
       appearance: "Udseende",
-      voice: "Stemme",         // <- sammensmeltet
+      voice: "Stemme",
       movement: "Bevægelse",
       demeanor: "Sindelag",
       persona: "Personlighed",
@@ -55,23 +58,16 @@ const t = {
       lockAll: "Lås alle",
       unlockAll: "Lås alle op",
       copyText: "Kopiér (tekst)",
-      copyJson: "Kopiér (JSON)",
       copyMJ: "Kopiér (Midjourney Web)",
-      rollOne: "omrull",       // per-felt reroll
+      perchance: "Kopiér (Perchance)",
+      perchanceEmbedToggle: "Vis Perchance i appen",
+      rollOne: "Omrul",
     },
     outputTitle: "Output",
     genderUnrevealed: "Uoplyst",
     common: { lock: "Lås", locked: "Låst", locksLabel: "Låse:" },
   },
 };
-
-function useLang(onLangChange) {
-  const [lang, setLang] = useState("da");
-  useEffect(() => { onLangChange?.(lang); }, [lang, onLangChange]);
-  const tr = t[lang];
-  return { lang, setLang, tr };
-}
-
 /** =========================================================
  *  Data (forkortet – udvid frit)
  * ======================================================= */
@@ -1239,7 +1235,72 @@ const weightedRoll = (items, weightMap = {}) => {
     r -= weights[i];
   }
   return items[items.length - 1];
-};
+}
+function buildPerchancePrompt(npc) {
+  const {
+    name = "",
+    gender = "",
+    race = "",
+    profession = "",
+    appearance = "",
+    voice = "",
+    movement = "",
+    demeanor = "",
+    persona = "",
+    trait = "",
+  } = npc || {};
+
+  const lines = [
+    // Garanterer portrait/fantasy-portrait vibe
+    "fantasy portrait, portrait orientation, head-and-shoulders, highly detailed, sharp focus",
+    race && `race: ${race}`,
+    gender && `gender: ${gender}`,
+    profession && `profession: ${profession}`,
+    appearance && `appearance: ${appearance}`,
+    voice && `voice/personality hint: ${voice}`,
+    movement && `movement/posture: ${movement}`,
+    demeanor && `demeanor: ${demeanor}`,
+    persona && `persona: ${persona}`,
+    trait && `distinct trait: ${trait}`,
+    "studio lighting, soft rim light, subtle depth of field, natural skin texture",
+  ].filter(Boolean);
+
+  return lines.join(", ");
+}
+
+
+async function tryCopyToClipboard(text) {
+  // 1) Moderne API
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    // fortsæt til fallback
+  }
+
+  // 2) Fallback (Safari/ældre)
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) return true;
+  } catch (e) {
+    // fortsæt til sidste fallback
+  }
+
+  // 3) Sidste udvej
+  alert("Kunne ikke kopiere automatisk.\nMarker og kopier prompten manuelt.");
+  return false;
+}
+
 
 /** =========================================================
  *  getTables (vi bevarer SPEECH/PITCH til at bygge 'voice')
@@ -1439,7 +1500,8 @@ useEffect(() => {
  *  Component
  * ======================================================= */
 export default function DnDNpcGenerator() {
-  const { lang, setLang, tr } = useLang();
+  const [lang, setLang] = useState("da");
+  const tr = t[lang];
   const tables = useMemo(() => getTables(lang), [lang]);
 
   const [locks, setLocks] = useState({
@@ -1450,53 +1512,40 @@ export default function DnDNpcGenerator() {
 
   const { npc, rerollAll, rerollField, undo, redo, canUndo, canRedo, replaceCurrent } = useNPC();
 
+  // ----------------- SPROGSKIFT (oversættelse af værdier) -----------------
+  const prevLangRef = useRef(lang);
+  useEffect(() => {
+    if (!npc) return;
+    if (prevLangRef.current === lang) return;
 
-
-
-   // Sprogskift: byg kilde-tabeller fra forrige sprog
-const prevLangRef = useRef(lang);
-useEffect(() => {
-  if (!npc) return;
-  if (prevLangRef.current === lang) return;
-
-  const fromTables =
-    prevLangRef.current === "da"
+    const fromTables = prevLangRef.current === "da"
       ? {
-          professions: PROFESSIONS_DA,
-          appearances: APPEARANCE_DA,
-          movement:    MOVEMENT_DA,
-          demeanor:    DEMEANOR_DA,
-          persona:     PERSONA_DA,
-          trait:       TRAIT_DA,
-          speech:      SPEECH_DA,
-          pitch:       PITCH_DA,
+          professions: PROFESSIONS_DA, appearances: APPEARANCE_DA, movement: MOVEMENT_DA,
+          demeanor: DEMEANOR_DA, persona: PERSONA_DA, trait: TRAIT_DA,
+          speech: SPEECH_DA, pitch: PITCH_DA,
         }
       : {
-          professions: PROFESSIONS_EN,
-          appearances: APPEARANCE_EN,
-          movement:    MOVEMENT_EN,
-          demeanor:    DEMEANOR_EN,
-          persona:     PERSONA_EN,
-          trait:       TRAIT_EN,
-          speech:      SPEECH_EN,
-          pitch:       PITCH_EN,
+          professions: PROFESSIONS_EN, appearances: APPEARANCE_EN, movement: MOVEMENT_EN,
+          demeanor: DEMEANOR_EN, persona: PERSONA_EN, trait: TRAIT_EN,
+          speech: SPEECH_EN, pitch: PITCH_EN,
         };
 
-  const updated = {
-    ...npc,
-    profession: locks.profession ? npc.profession : translateValue(npc.profession, fromTables.professions, tables.professions),
-    appearance: locks.appearance ? npc.appearance : translateValue(npc.appearance, fromTables.appearances, tables.appearances),
-    movement:   locks.movement   ? npc.movement   : translateValue(npc.movement,   fromTables.movement,   tables.movement),
-    demeanor:   locks.demeanor   ? npc.demeanor   : translateValue(npc.demeanor,   fromTables.demeanor,   tables.demeanor),
-    persona:    locks.persona    ? npc.persona    : translateValue(npc.persona,    fromTables.persona,    tables.persona),
-    trait:      locks.trait      ? npc.trait      : translateValue(npc.trait,      fromTables.trait,      tables.trait),
-    voice:      locks.voice      ? npc.voice      : translateVoice(npc.voice, fromTables.pitch, tables.pitch, fromTables.speech, tables.speech),
-  };
+    const updated = {
+      ...npc,
+      profession: locks.profession ? npc.profession : translateValue(npc.profession, fromTables.professions, tables.professions),
+      appearance: locks.appearance ? npc.appearance : translateValue(npc.appearance, fromTables.appearances, tables.appearances),
+      movement:   locks.movement   ? npc.movement   : translateValue(npc.movement,   fromTables.movement,   tables.movement),
+      demeanor:   locks.demeanor   ? npc.demeanor   : translateValue(npc.demeanor,   fromTables.demeanor,   tables.demeanor),
+      persona:    locks.persona    ? npc.persona    : translateValue(npc.persona,    fromTables.persona,    tables.persona),
+      trait:      locks.trait      ? npc.trait      : translateValue(npc.trait,      fromTables.trait,      tables.trait),
+      voice:      locks.voice      ? npc.voice      : translateVoice(npc.voice, fromTables.pitch, tables.pitch, fromTables.speech, tables.speech),
+    };
 
-  replaceCurrent(updated);
-  prevLangRef.current = lang;
-}, [lang, npc, replaceCurrent]);
+    replaceCurrent(updated);
+    prevLangRef.current = lang;
+  }, [lang, npc, replaceCurrent, locks, tables]);
 
+  // ----------------- OUTPUTS -----------------
   const textOut = useMemo(() => {
     if (!npc) return "";
     return `${tr.fields.name}: ${npc.name}
@@ -1511,180 +1560,263 @@ ${tr.fields.persona}: ${npc.persona}
 ${tr.fields.trait}: ${npc.trait}`;
   }, [npc, tr]);
 
-  const jsonOut = useMemo(() => {
-    if (!npc) return "{}";
-    return JSON.stringify(
-      { ...npc, displayGender: displayGenderFor(npc.race, npc.gender, tr), lang },
-      null, 2
-    );
-  }, [npc, tr, lang]);
+ // ----------------- HANDLERS (kopi + låse) -----------------
 
-  const copy = async (str) => {
-    try { await navigator.clipboard.writeText(str); }
-    catch (e) { console.log("Copy failed:", e); }
-  };
+// Links – ret dem gerne til dine foretrukne destinationssider
+const MIDJOURNEY_URL = "https://www.midjourney.com/";
+const PERCHANCE_URL  = "https://perchance.org/ai";
 
-  if (!npc) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 grid place-items-center">
-        <p className="text-slate-300">Loader NPC…</p>
-      </div>
-    );
-  }
+const openAndCopy = (url, prompt) => {
+  tryCopyToClipboard(prompt);
+  // Åbn i ny fane uden at lække referrer
+  window.open(url, "_blank", "noopener,noreferrer");
+};
 
+const handleOpenMidjourney = () => {
+  if (!npc) return;
+  const mj = buildMidjourneyPromptWeb(npc);
+  openAndCopy(MIDJOURNEY_URL, mj);
+};
+
+const handleOpenPerchance = () => {
+  if (!npc) return;
+  // Som ønsket: også Perchance kopierer *Midjourney*-prompten
+  const mj = buildMidjourneyPromptWeb(npc);
+  openAndCopy(PERCHANCE_URL, mj);
+};
+
+ // Global lock/unlock
+const lockAll = () => {
+  setLocks({
+    name: true, gender: true, race: true, profession: true,
+    appearance: true, voice: true, movement: true, demeanor: true,
+    persona: true, trait: true,
+  });
+};
+
+const unlockAll = () => {
+  setLocks({
+    name: false, gender: false, race: false, profession: false,
+    appearance: false, voice: false, movement: false, demeanor: false,
+    persona: false, trait: false,
+  });
+};
+
+// Reroll alle felter (respekterer locks)
+const handleRollAll = () => {
+  rerollAll(locks, tables);
+};
+
+// Kopiér-helpers
+const handleCopyText = () => {
+  if (!npc) return;
+  tryCopyToClipboard(textOut);
+};
+
+const handleCopyMJ = () => {
+  if (!npc) return;
+  const mj = buildMidjourneyPromptWeb(npc);
+  tryCopyToClipboard(mj);
+};
+
+const handleCopyPerchance = () => {
+  if (!npc) return;
+  const base = buildPerchancePrompt(npc);
+  // Tilføj "(perchance)" til sidst så det er tydeligt hvad prompten er til
+  tryCopyToClipboard(`${base} (perchance)`);
+};
+
+// Toggle et enkelt lock
+const toggleLock = (key) => {
+  setLocks((l) => ({ ...l, [key]: !l[key] }));
+};
+
+// ----------------- SLUT: HANDLERS -----------------
+
+// ---------------------------------------------------------------
+// START på TIDLIG RETURN-BLOK (loading/ingen npc endnu)
+// ---------------------------------------------------------------
+if (!npc) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="max-w-4xl mx-auto p-6 space-y-8">
-        {/* Header */}
-        <header className="text-center space-y-4">
-          <div className="flex justify-center gap-2 mb-4">
-            <button
-              className={`px-4 py-2 rounded-lg transition-all duration-200 ${
-                lang === "en" ? "bg-emerald-500 text-white shadow-lg" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setLang("en")}
-            >
-              <Globe className="w-4 h-4 inline mr-1" />
-              EN
-            </button>
-            <button
-              className={`px-4 py-2 rounded-lg transition-all duration-200 ${
-                lang === "da" ? "bg-emerald-500 text-white shadow-lg" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setLang("da")}
-            >
-              <Globe className="w-4 h-4 inline mr-1" />
-              DA
-            </button>
-          </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-400 to-purple-400 bg-clip-text text-transparent">
-            {tr.appTitle}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-  {t[lang].subtitle}{" "}
-  <a
-    href="https://asaheim.dk"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="underline hover:no-underline"
-  >
-    asaheim.dk
-  </a>
-</p>
-        </header>
-
-        {/* Cards */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {[
-            { key: "name", value: npc.name },
-            { key: "gender", value: displayGenderFor(npc.race, npc.gender, tr) },
-            { key: "race", value: npc.race },
-            { key: "profession", value: npc.profession },
-            { key: "appearance", value: npc.appearance },
-            { key: "voice", value: npc.voice },               // merged
-            { key: "movement", value: npc.movement },
-            { key: "demeanor", value: npc.demeanor },
-            { key: "persona", value: npc.persona },
-            { key: "trait", value: npc.trait },
-          ].map(({ key, value }) => (
-            <FieldCard
-              key={key}
-              tr={tr}
-              label={tr.fields[key]}
-              value={value}
-              locked={locks[key]}
-              onLock={() => setLocks((s) => ({ ...s, [key]: !s[key] }))}
-              onReroll={() => rerollField(key, locks, tables)}
-            />
-          ))}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="space-y-6">
-          <div className="text-center">
-            <button
-              className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200"
-              onClick={() => rerollAll(locks, tables)}
-            >
-              <Shuffle className="w-5 h-5 inline mr-2" />
-              {tr.buttons.roll}
-            </button>
-          </div>
-
-          <div className="mt-3 flex justify-center gap-3">
-  <button
-    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
-    onClick={undo}
-    disabled={!canUndo}
-  >
-    <UndoIcon className="w-4 h-4 inline mr-1" />
-    {lang === "da" ? "Fortryd" : "Undo"}
-  </button>
-  <button
-    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
-    onClick={redo}
-    disabled={!canRedo}
-  >
-    <RedoIcon className="w-4 h-4 inline mr-1" />
-    {lang === "da" ? "Gendan" : "Redo"}
-  </button>
-</div>
-
-          <div className="flex flex-wrap justify-center gap-3">
-            <button
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors duration-200"
-              onClick={() => setLocks(Object.fromEntries(Object.keys(locks).map((k) => [k, true])))}
-            >
-              <Lock className="w-4 h-4 inline mr-1" />
-              {tr.buttons.lockAll}
-            </button>
-            <button
-              className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-lg transition-colors duration-200"
-              onClick={() => setLocks(Object.fromEntries(Object.keys(locks).map((k) => [k, false])))}
-            >
-              <Unlock className="w-4 h-4 inline mr-1" />
-              {tr.buttons.unlockAll}
-            </button>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3">
-            <button
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200"
-              onClick={() => copy(textOut)}
-            >
-              <Copy className="w-4 h-4 inline mr-1" />
-              {tr.buttons.copyText}
-            </button>
-            <button
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200"
-              onClick={() => copy(jsonOut)}
-            >
-              <Download className="w-4 h-4 inline mr-1" />
-              {tr.buttons.copyJson}
-            </button>
-            <button
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors duration-200"
-              onClick={() => copy(buildMidjourneyPromptWeb(npc))}
-              title="Copy Midjourney prompt"
-            >
-              <Copy className="w-4 h-4 inline mr-1" />
-              {tr.buttons.copyMJ}
-            </button>
-          </div>
-        </div>
-
-        {/* Output */}
-        <section className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-          <h2 className="text-xl font-semibold mb-4 text-emerald-400">{tr.outputTitle}</h2>
-          <pre className="whitespace-pre-wrap text-sm bg-slate-900/60 rounded-lg p-4 border border-slate-700 text-slate-200">
-            {textOut}
-          </pre>
-        </section>
+    <div className="min-h-screen grid place-items-center bg-slate-900 text-slate-300">
+      <div className="text-center space-y-2">
+        <div className="animate-pulse text-lg">Loading NPC…</div>
+        <div className="text-xs opacity-70">Generatoren initialiseres</div>
       </div>
     </div>
   );
 }
+// ---------------------------------------------------------------
+// SLUT på TIDLIG RETURN-BLOK
+// ---------------------------------------------------------------
 
+return (
+  <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
+
+      {/* Top bar med sprog */}
+      <div className="flex justify-center gap-2">
+        <button
+          className={`px-3 py-1.5 rounded-lg ${lang === "en" ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"} `}
+          onClick={() => setLang("en")}
+        >
+          EN
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-lg ${lang === "da" ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"} `}
+          onClick={() => setLang("da")}
+        >
+          DA
+        </button>
+      </div>
+
+      {/* Header med centreret tekst */}
+<header className="text-center">
+  {/* Titel */}
+  <h1 className="text-5xl font-bold text-indigo-400 drop-shadow-lg tracking-wide">
+    {tr.appTitle}
+  </h1>
+
+  {/* Undertitel */}
+  <p className="text-lg text-slate-400 mt-2">
+    {tr.subtitle}{" "}
+    <a
+      href="https://asaheim.dk"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-emerald-400 hover:text-emerald-300 font-semibold"
+    >
+      asaheim.dk
+    </a>
+  </p>
+</header>
+
+      {/* Grid med NPC-felter */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FieldCard label={tr.fields.name} value={npc.name} locked={locks.name} onLock={() => toggleLock("name")} onReroll={() => rerollField("name", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.gender} value={displayGenderFor(npc.race, npc.gender, tr)} locked={locks.gender} onLock={() => toggleLock("gender")} onReroll={() => rerollField("gender", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.race} value={npc.race} locked={locks.race} onLock={() => toggleLock("race")} onReroll={() => rerollField("race", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.profession} value={npc.profession} locked={locks.profession} onLock={() => toggleLock("profession")} onReroll={() => rerollField("profession", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.appearance} value={npc.appearance} locked={locks.appearance} onLock={() => toggleLock("appearance")} onReroll={() => rerollField("appearance", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.voice} value={npc.voice} locked={locks.voice} onLock={() => toggleLock("voice")} onReroll={() => rerollField("voice", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.movement} value={npc.movement} locked={locks.movement} onLock={() => toggleLock("movement")} onReroll={() => rerollField("movement", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.demeanor} value={npc.demeanor} locked={locks.demeanor} onLock={() => toggleLock("demeanor")} onReroll={() => rerollField("demeanor", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.persona} value={npc.persona} locked={locks.persona} onLock={() => toggleLock("persona")} onReroll={() => rerollField("persona", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.trait} value={npc.trait} locked={locks.trait} onLock={() => toggleLock("trait")} onReroll={() => rerollField("trait", locks, tables)} tr={tr} />
+      </section>
+
+      {/* Actions */}
+      <section className="space-y-4 text-center">
+
+        {/* Rul! */}
+        <div>
+          <button
+            className="px-6 py-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 font-bold"
+            onClick={() => rerollAll(locks, tables)}
+          >
+            {tr.buttons.roll}
+          </button>
+        </div>
+
+        {/* Fortryd / Gendan */}
+        <div className="flex justify-center gap-2">
+          <button
+            className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-50"
+            onClick={undo}
+            disabled={!canUndo}
+          >
+            <UndoIcon className="w-4 h-4 inline mr-1" />
+            Fortryd
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-50"
+            onClick={redo}
+            disabled={!canRedo}
+          >
+            <RedoIcon className="w-4 h-4 inline mr-1" />
+            Gendan
+          </button>
+        </div>
+
+        {/* Lås alle / Lås alle op */}
+        <div className="flex justify-center gap-2">
+          <button
+            className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-500"
+            onClick={lockAll}
+          >
+            <Lock className="w-4 h-4 inline mr-1" />
+            {tr.buttons.lockAll}
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500"
+            onClick={unlockAll}
+          >
+            <Unlock className="w-4 h-4 inline mr-1" />
+            {tr.buttons.unlockAll}
+          </button>
+        </div>
+
+        {/* Kopier-knapper */}
+        <div className="flex justify-center gap-2">
+          <button
+            className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600"
+            onClick={handleCopyText}
+          >
+            <Copy className="w-4 h-4 inline mr-1" />
+            {tr.buttons.copyText}
+          </button>
+
+          {/* Midjourney */}
+          <button
+            className="px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500"
+            onClick={() => {
+              if (!npc) return;
+              const mj = buildMidjourneyPromptWeb(npc);
+              tryCopyToClipboard(mj);
+              window.open("https://www.midjourney.com/imagine", "_blank");
+            }}
+          >
+            <Copy className="w-4 h-4 inline mr-1" />
+            {tr.buttons.copyMJ}
+          </button>
+
+          {/* Perchance */}
+          <button
+            className="px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500"
+            onClick={() => {
+              if (!npc) return;
+              const mj = buildMidjourneyPromptWeb(npc); // samme prompt som MJ
+              tryCopyToClipboard(mj);
+              window.open("https://perchance.org/ai-text-to-image-generator", "_blank");
+            }}
+          >
+            <Copy className="w-4 h-4 inline mr-1" />
+            {tr.buttons.perchance}
+          </button>
+        </div>
+      </section>
+
+      {/* Output */}
+      <section className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 shadow-xl">
+        <h2 className="text-xl font-bold text-emerald-400 mb-4">{tr.outputTitle}</h2>
+        <pre className="whitespace-pre-wrap text-slate-200 text-sm">{textOut}</pre>
+      </section>
+    </div>
+  </div>
+);}
+// ---------------------------------------------------------------
+// SLUT på return-blokken
+// ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// SLUT på HOVED-return-blokken
+// ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// SLUT på hele funktionen DnDNpcGenerator
+// ---------------------------------------------------------------
+
+// ---------------------------------------------------------------
+// FieldCard komponent starter herunder
+// ---------------------------------------------------------------
 function FieldCard({ label, value, locked, onLock, onReroll, tr }) {
   return (
     <div className="bg-slate-800/30 backdrop-blur-sm rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-all duration-200">
@@ -1702,7 +1834,6 @@ function FieldCard({ label, value, locked, onLock, onReroll, tr }) {
             <Shuffle className="w-3 h-3 inline mr-1" />
             {tr.buttons.rollOne}
           </button>
-
           <button
             className={`px-3 py-1 text-xs rounded-full transition-all duration-200 ${
               locked ? "bg-emerald-600 text-white shadow-lg" : "bg-slate-600 text-slate-300 hover:bg-slate-500"
