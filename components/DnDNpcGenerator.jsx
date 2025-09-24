@@ -20,7 +20,7 @@ const t = {
       voice: "Voice",
       movement: "Movement",
       demeanor: "Demeanor",
-      persona: "Persona",
+      persona: "Personality",
       trait: "Trait",
     },
     buttons: {
@@ -28,8 +28,8 @@ const t = {
       lockAll: "Lock All",
       unlockAll: "Unlock All",
       copyText: "Copy (text)",
-      copyMJ: "Copy (Midjourney Web)",
-      perchance: "Copy (Perchance)",
+      copyMJ: "Copy to Midjourney (paid)",
+      perchance: "Copy to Perchance (free)",
       perchanceEmbedToggle: "Show Perchance in app",
       rollOne: "Reroll",
     },
@@ -58,8 +58,8 @@ const t = {
       lockAll: "Lås alle",
       unlockAll: "Lås alle op",
       copyText: "Kopiér (tekst)",
-      copyMJ: "Kopiér (Midjourney Web)",
-      perchance: "Kopiér (Perchance)",
+      copyMJ: "Kopiér til Midjourney (koster at bruge)",
+      perchance: "Kopiér til Perchance (gratis at bruge)",
       perchanceEmbedToggle: "Vis Perchance i appen",
       rollOne: "Omrul",
     },
@@ -1099,6 +1099,22 @@ const TRAIT_DA = [
 /** =========================================================
  *  Gender (weighted) + hidden-gender races
  * ======================================================= */
+// ===================== START: GENDER LABELS (EN/DA) =====================
+const GENDER_LABELS = {
+  en: {
+    Male: "Male",
+    Female: "Female",
+    "Non-binary": "Non-binary",
+    Hermaphrodite: "Hermaphrodite",
+  },
+  da: {
+    Male: "Mand",
+    Female: "Kvinde",
+    "Non-binary": "non-binær",
+    Hermaphrodite: "hermafrodit",
+  },
+};
+// ===================== SLUT: GENDER LABELS (EN/DA) =====================
 const GENDERS = ["Male", "Female", "Non-binary", "Hermaphrodite"];
 function weightedGender() {
   const r = Math.random() * 100;
@@ -1108,9 +1124,16 @@ function weightedGender() {
   return "Hermaphrodite";
 }
 const genderHiddenRaces = new Set(["Dragonborn", "Lizardfolk", "Kobold"]);
-function displayGenderFor(race, gender, tr) {
-  return genderHiddenRaces.has(race) ? tr.genderUnrevealed : gender;
+// ===================== START: displayGenderFor (med sprog) =====================
+function displayGenderFor(race, gender, tr, lang = "en") {
+  // Skjult køn for visse racer = "Uoplyst"/"Unrevealed"
+  if (genderHiddenRaces.has(race)) return tr.genderUnrevealed;
+
+  // Mappet visningslabel per sprog
+  const dict = GENDER_LABELS[lang] || GENDER_LABELS.en;
+  return dict[gender] ?? gender; // fallback til rå værdi hvis ukendt
 }
+// ===================== SLUT: displayGenderFor (med sprog) =====================
 
 /** =========================================================
  *  Races (weighted)
@@ -1212,13 +1235,13 @@ function raceDescriptor(race) {
 function buildMidjourneyPromptWeb(npc) {
   const genderOut = displayGenderFor(npc.race, npc.gender, t.en);
   const parts = [
-    "fantasy character portrait, head & shoulders",
+    "fantasy character portrait, head & shoulders, D&D style",
    `${raceDescriptor(npc.race)}, ${genderOut} ${npc.profession}`,
-    `demeanor: ${npc.demeanor}`,
-    `appearance details: ${npc.appearance}`,
-    `voice: ${npc.voice}`, // merged
-    `movement vibe: ${npc.movement}`,
-    "rich lighting, painterly detail, sharp focus, neutral background, subtle costume matching the role, color harmony, (no modern items), (no text)"
+    `${npc.demeanor}`,
+    ` ${npc.appearance}`,
+    
+    ` ${npc.movement}`,
+    "rich lighting, photorealistic, painterly detail, sharp focus, neutral background, subtle costume matching the role, color harmony, (no modern items), (no text)"
   ];
   const seed = seedFromString(npc.name || `${npc.race}-${npc.profession}`);
   return `${parts.join(", ")} --ar 2:3 --v 6 --style raw --s 250 --seed ${seed}`;
@@ -1549,7 +1572,7 @@ export default function DnDNpcGenerator() {
   const textOut = useMemo(() => {
     if (!npc) return "";
     return `${tr.fields.name}: ${npc.name}
-${tr.fields.gender}: ${displayGenderFor(npc.race, npc.gender, tr)}
+${tr.fields.gender}: ${displayGenderFor(npc.race, npc.gender, tr, lang)}
 ${tr.fields.race}: ${npc.race}
 ${tr.fields.profession}: ${npc.profession}
 ${tr.fields.appearance}: ${npc.appearance}
@@ -1694,7 +1717,7 @@ return (
       {/* Grid med NPC-felter */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FieldCard label={tr.fields.name} value={npc.name} locked={locks.name} onLock={() => toggleLock("name")} onReroll={() => rerollField("name", locks, tables)} tr={tr} />
-        <FieldCard label={tr.fields.gender} value={displayGenderFor(npc.race, npc.gender, tr)} locked={locks.gender} onLock={() => toggleLock("gender")} onReroll={() => rerollField("gender", locks, tables)} tr={tr} />
+        <FieldCard label={tr.fields.gender} value={displayGenderFor(npc.race, npc.gender, tr, lang)} locked={locks.gender} onLock={() => toggleLock("gender")} onReroll={() => rerollField("gender", locks, tables)} tr={tr} />
         <FieldCard label={tr.fields.race} value={npc.race} locked={locks.race} onLock={() => toggleLock("race")} onReroll={() => rerollField("race", locks, tables)} tr={tr} />
         <FieldCard label={tr.fields.profession} value={npc.profession} locked={locks.profession} onLock={() => toggleLock("profession")} onReroll={() => rerollField("profession", locks, tables)} tr={tr} />
         <FieldCard label={tr.fields.appearance} value={npc.appearance} locked={locks.appearance} onLock={() => toggleLock("appearance")} onReroll={() => rerollField("appearance", locks, tables)} tr={tr} />
