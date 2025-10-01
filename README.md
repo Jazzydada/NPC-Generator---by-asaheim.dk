@@ -2,7 +2,7 @@
 
 Midjourney web prompt (no `/imagine`), weighted races, EN/DA UI. 
 
-Run:
+Run: 
 ```
 npm i
 npm run dev
