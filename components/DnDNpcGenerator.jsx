@@ -3,17 +3,166 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Globe, Shuffle, Lock, Unlock, Copy, Download, Undo as UndoIcon, Redo as RedoIcon } from "lucide-react";
 
+/* ====================== AGE PROFILES BY RACE (5e-inspireret m. labels) ======================
+   - minAdult: alder for voksenalder (kønsmoden)
+   - max: typisk maksimal levealder
+   - bands: vægtede aldersbånd med engelsk label til MJ-prompts
+=============================================================================== */
+const AGE_PROFILES = {
+  Human: {
+    minAdult: 18, max: 90,
+    bands: [
+      { to: 29, w: 3, label: "youthful" },
+      { to: 59, w: 4, label: "middle-aged" },
+      { to: 80, w: 2, label: "elderly" },
+      { to: 90, w: 1, label: "ancient" },
+    ]
+  },
+  Elf: {
+    minAdult: 100, max: 750,
+    bands: [
+      { to: 149, w: 3, label: "youthful" },
+      { to: 299, w: 4, label: "middle-aged" },
+      { to: 599, w: 2, label: "elderly" },
+      { to: 750, w: 1, label: "ancient" },
+    ]
+  },
+  Dwarf: {
+    minAdult: 50, max: 350,
+    bands: [
+      { to: 119, w: 3, label: "youthful" },
+      { to: 239, w: 4, label: "middle-aged" },
+      { to: 309, w: 2, label: "elderly" },
+      { to: 350, w: 1, label: "ancient" },
+    ]
+  },
+  Halfling: {
+    minAdult: 20, max: 150,
+    bands: [
+      { to: 39, w: 3, label: "youthful" },
+      { to: 89, w: 4, label: "middle-aged" },
+      { to: 129, w: 2, label: "elderly" },
+      { to: 150, w: 1, label: "ancient" },
+    ]
+  },
+  Gnome: {
+    minAdult: 40, max: 425,
+    bands: [
+      { to: 119, w: 3, label: "youthful" },
+      { to: 219, w: 4, label: "middle-aged" },
+      { to: 349, w: 2, label: "elderly" },
+      { to: 425, w: 1, label: "ancient" },
+    ]
+  },
+  "Half-elf": {
+    minAdult: 20, max: 180,
+    bands: [
+      { to: 39, w: 3, label: "youthful" },
+      { to: 89, w: 4, label: "middle-aged" },
+      { to: 149, w: 2, label: "elderly" },
+      { to: 180, w: 1, label: "ancient" },
+    ]
+  },
+  "Half-orc": {
+    minAdult: 14, max: 75,
+    bands: [
+      { to: 24, w: 3, label: "youthful" },
+      { to: 44, w: 4, label: "middle-aged" },
+      { to: 64, w: 2, label: "elderly" },
+      { to: 75, w: 1, label: "ancient" },
+    ]
+  },
+  Dragonborn: {
+    minAdult: 15, max: 80,
+    bands: [
+      { to: 24, w: 3, label: "youthful" },
+      { to: 44, w: 4, label: "middle-aged" },
+      { to: 64, w: 2, label: "elderly" },
+      { to: 80, w: 1, label: "ancient" },
+    ]
+  },
+  Tiefling: {
+    minAdult: 18, max: 100,
+    bands: [
+      { to: 29, w: 3, label: "youthful" },
+      { to: 59, w: 4, label: "middle-aged" },
+      { to: 85, w: 2, label: "elderly" },
+      { to: 100, w: 1, label: "ancient" },
+    ]
+  },
+  // fallback
+  Default: {
+    minAdult: 18, max: 100,
+    bands: [
+      { to: 29, w: 3, label: "youthful" },
+      { to: 59, w: 4, label: "middle-aged" },
+      { to: 85, w: 2, label: "elderly" },
+      { to: 100, w: 1, label: "ancient" },
+    ]
+  },
+};
+
+/* ====================== AGE ROLL HELPER ====================== */
+function pickWeighted(items) {
+  const total = items.reduce((s,i)=>s+i.w,0);
+  let r = Math.random()*total;
+  for (const it of items) { if ((r -= it.w) <= 0) return it; }
+  return items[items.length-1];
+}
+
+function normalizeRaceToAgeKey(r) {
+  const s = String(r || "").toLowerCase();
+  if (s.includes("human")) return "Human";
+  if (s.includes("half-elf")) return "Half-elf";
+  if (s.includes("elf")) return "Elf";
+  if (s.includes("dwarf")) return "Dwarf";
+  if (s.includes("halfling")) return "Halfling";
+  if (s.includes("gnome")) return "Gnome";
+  if (s.includes("half-orc") || s === "orc") return "Half-orc";
+  if (s.includes("dragonborn")) return "Dragonborn";
+  if (s.includes("tiefling")) return "Tiefling";
+  return "Default";
+}
+
+function rollAgeByRace(raceNameRaw) {
+  const key = normalizeRaceToAgeKey(raceNameRaw);
+  const profile = AGE_PROFILES[key] || AGE_PROFILES.Default;
+
+  const band = pickWeighted(profile.bands);
+  const min = profile.minAdult;
+  const upper = Math.max(band.to, min + 1);
+  const age = Math.floor(Math.random() * (upper - min + 1)) + min;
+
+  return {
+    age: Math.min(Math.max(age, min), profile.max),
+    label: band.label,
+  };
+}
+
+// Hjælper: find label til en given alder (bruges når race skifter men alder låst)
+function labelForAge(raceNameRaw, age) {
+  const key = normalizeRaceToAgeKey(raceNameRaw);
+  const p = AGE_PROFILES[key] || AGE_PROFILES.Default;
+  const min = p.minAdult;
+  const a = Math.max(age ?? min, min);
+  for (const b of p.bands) {
+    const to = Math.max(b.to, min);
+    if (a <= to) return b.label;
+  }
+  return p.bands[p.bands.length - 1]?.label || "middle-aged";
+}
 
 /** =========================================================
  *  i18n (EN/DA) — FIXED
  * ======================================================= */
 const t = {
   en: {
-    appTitle: "RPG NPC Generator",
+    appTitle: "RoleSmith RPG",
     subtitle: "Weighted races • 100 professions • 700 traits • Made by",
     fields: {
       name: "Name",
       gender: "Gender",
+      age: "Age",               // <-- NYT
       race: "Race",
       profession: "Profession",
       appearance: "Appearance",
@@ -44,14 +193,15 @@ const t = {
     fields: {
       name: "Navn",
       gender: "Køn",
+      age: "Alder",             // <-- NYT
       race: "Race",
       profession: "Profession",
       appearance: "Udseende",
       voice: "Stemme",
       movement: "Bevægelse",
-      demeanor: "Sindelag",
+      demeanor: "Fremtoning",
       persona: "Personlighed",
-      trait: "Kendetegn",
+      trait: "Træk",
     },
     buttons: {
       roll: "Rul!",
@@ -71,6 +221,295 @@ const t = {
 /** =========================================================
  *  Data (forkortet – udvid frit)
  * ======================================================= */
+
+// ===================== START: NAME_TABLES (race->fornavne/efternavne) =====================
+// Normaliser race-navn til navn-nøgle
+function normalizeRaceToNameKey(r) {
+  const s = String(r || "").toLowerCase();
+
+  // specifikke elfer først
+  if (s.includes("dark elf") || s.includes("drow")) return "Dark Elf (Drow)";
+  if (s.includes("high elf")) return "High Elf";
+  if (s.includes("wood elf")) return "Wood Elf";
+
+  if (s.includes("half-elf")) return "Half-Elf";
+  if (s.includes("human")) return "Human";
+
+  // generisk 'Elf' fallback
+  if (s.includes("elf")) return "Elf";
+
+  if (s.includes("dwarf")) return "Dwarf";
+  if (s.includes("halfling")) return "Halfling";
+  if (s.includes("gnome")) return "Gnome";
+
+  // orc: skelner fra half-orc
+  if (s.includes("half-orc")) return "Half-Orc";
+  if (s === "orc" || (s.includes("orc") && !s.includes("half"))) return "Orc";
+
+  if (s.includes("tiefling")) return "Tiefling";
+
+  // andre kan falde tilbage til human-navne
+  if (s.includes("dragonborn")) return "Dragonborn";
+  return "Human";
+}
+
+// Store, færdige navnelister (vægtet ved mængde pr. race)
+const NAME_TABLES = {
+  Human: {
+    first: [
+      "Alden","Alric","Amelia","Andric","Ansel","Arabella","Aric","Ashlyn","Barret","Bastien",
+      "Beatrice","Belinda","Brenna","Brigid","Brynn","Caldus","Calla","Cedric","Celeste","Cora",
+      "Corin","Cyrus","Dalia","Darian","Dorian","Drea","Edmund","Edric","Elara","Elias",
+      "Elric","Elwin","Emilia","Emrys","Erik","Esme","Eveline","Fabian","Fendrel","Finn",
+      "Freya","Garrick","Gideon","Giselle","Gregor","Halric","Harlan","Helena","Hugo","Ilyana",
+      "Ingrid","Isolde","Ivan","Jareth","Jasper","Joran","Julian","Kaelen","Kara","Kendra",
+      "Leoric","Leona","Lionel","Luthien","Lyra","Maelis","Marcus","Marian","Mirella","Nadia",
+      "Nerys","Niall","Nolan","Norah","Orin","Osric","Owen","Petra","Philip","Quentis",
+      "Quinn","Roderick","Rosamund","Rowan","Saren","Selene","Seraphina","Stefan","Talia","Thorne",
+      "Tobias","Toren","Ulric","Uther","Varis","Veyra","Viktor","Willem","Wrenna","Ysabel"
+    ],
+    last: [
+      "Ashford","Ainsley","Banefort","Barrow","Blackwell","Blackwood","Blake","Blythe","Bolden","Bracken",
+      "Brightwater","Brookstone","Caldwell","Carrow","Chambers","Coldwell","Corvin","Crestfall","Crowhurst","Dalton",
+      "Damaris","Danforth","Delacroix","Duskbane","Eastmere","Eddington","Ellery","Fairholt","Falken","Fenwick",
+      "Fletcher","Foxworth","Glass","Goldmere","Goodwin","Greythorne","Halbrook","Hale","Harrington","Hartwell",
+      "Hawthorne","Highfield","Huxley","Ironwood","Jamison","Kaelthorn","Kingsford","Lancaster","Larksong","Lennox",
+      "Lockmere","Longshadow","Lovelace","Marshfield","Mayfair","Merrick","Montclair","Mornvale","Northwood","Norwood",
+      "Oakheart","Ormsby","Pendral","Prescott","Ravenshade","Redwyne","Remington","Rosethorn","Rowanfield","Sandford",
+      "Sawyer","Shadowmere","Sheffield","Silvercross","Sinclair","Southwell","Starcrest","Sterling","Stonebrook","Stormrider",
+      "Stroud","Sutton","Tallowmere","Thistledown","Thornfield","Townsend","Umberwell","Underwood","Valemont","Veylor",
+      "Waverly","Westbrook","Westmark","Whitaker","Whitlock","Whitmore","Wickham","Wilcox","Winterhold","Worthington"
+    ]
+  },
+
+  Elf: {
+    first: [
+      "Aelar","Aenwyn","Aerin","Aerith","Althaea","Amaranth","Amriel","Anarion","Arannis","Aredhel",
+      "Arlen","Arwen","Belanor","Belwyn","Caladrel","Calithil","Celandine","Celemir","Celwyn","Cirdan",
+      "Daelis","Daenor","Delanil","Delwyn","Dior","Elandra","Elenion","Elenya","Elian","Elira",
+      "Elorin","Elyndra","Eowyn","Erannis","Erevan","Faelar","Faelyn","Falael","Falon","Fenian",
+      "Galadrel","Galathil","Galen","Gilrael","Gilwen","Haemir","Haldir","Haleth","Ilyndra","Iltharion",
+      "Imloth","Irime","Isilwen","Ithil","Kaelen","Kaeriel","Kelathil","Kelwyn","Laerwen","Lethariel",
+      "Lirael","Luthien","Maeglin","Maeral","Maewen","Melwas","Merenwen","Mirthal","Mithrellas","Myrddin",
+      "Naeris","Naivara","Nenya","Nimriel","Niniel","Olorin","Ondine","Orophin","Oryl","Phyrra",
+      "Quelenna","Quelmar","Quenya","Raelith","Rhovaniel","Saelith","Serelith","Sylwen","Taenya","Thaelion",
+      "Thalindra","Thalion","Thranduil","Tinuviel","Vaelion","Vanya","Yavanna","Yllairies","Ysolde","Zaleria"
+    ],
+    last: [
+      "Aelrath","Amastacia","Amarion","Aranel","Aravath","Auvyann","Baelthorn","Belanoril","Brightsong","Caerthian",
+      "Calarel","Celethil","Celorin","Cindralis","Crystalis","Daelwyn","Dawnwhisper","Dhorlas","Duskwillow","Elandriel",
+      "Elarion","Elenath","Ellarian","Erevath","Evenwood","Faenoris","Faethorn","Firael","Florindral","Galathorn",
+      "Gildurien","Glynrael","Halethorn","Helyanwë","Ilmarith","Ilrien","Immeral","Isilvaris","Ithildor","Kaelthas",
+      "Kelathorn","Kelmaris","Larethian","Letharion","Lhoris","Liraeth","Lithanar","Lorindral","Lutharos","Melwasar",
+      "Miraethis","Mithdoren","Moonbrook","Moonwhisper","Naelrith","Neldoriel","Nightbreeze","Nightstar","Norvalis","Olorath",
+      "Ondelith","Orelindar","Orithal","Orowen","Phirael","Phyrelis","Quelenath","Quillathe","Raelthorn","Rhovanis",
+      "Saelvath","Selthariel","Shaelthas","Shalandar","Silverbough","Silverfrond","Silverleaf","Starbreeze","Starfall","Starlith",
+      "Sylvaris","Taelwyn","Thaelindar","Thalethis","Thrandarin","Tinuvalis","Ulmaril","Uthariel","Vaelthas","Vanyarion",
+      "Velarion","Veylath","Windwhisper","Wynvaris","Yelrath","Ysilwen","Ythariel","Zalethorn","Zhaeril","Ziltharion"
+    ]
+  },
+
+  Dwarf: {
+    first: [
+      "Adrik","Alben","Alrik","Ambrin","Anbera","Arvid","Baela","Balderk","Barendd","Belmara",
+      "Bhaldur","Bofric","Borin","Bromm","Brunhilde","Brynna","Cadric","Dain","Dagna","Darrak",
+      "Dela","Dolgrin","Duerna","Duric","Dwilla","Ebgrin","Eberk","Elda","Eldeth","Fargrim",
+      "Farnan","Floki","Garena","Garrim","Gimra","Ginarra","Glorim","Gralda","Grodd","Grona",
+      "Grum","Gundren","Hagar","Halgrin","Hilda","Hjalmar","Hlin","Hroar","Hurrik","Ingra",
+      "Irgunn","Jarda","Jorunn","Kargrom","Kathra","Kildrak","Kira","Kolgrim","Kori","Krag",
+      "Kurgan","Leif","Loric","Magda","Magnar","Malthor","Marta","Mjorn","Morgran","Norgrin",
+      "Nori","Nundra","Olga","Oskar","Ragna","Ragni","Rangrim","Rardra","Rurik","Sannl",
+      "Sigrid","Sindri","Skaf","Skarra","Sten","Stogar","Svana","Thaldin","Thora","Thorin",
+      "Thrain","Thrond","Torbera","Tordek","Tova","Traubon","Turgar","Ulla","Vigdis","Vondal"
+    ],
+    last: [
+      "Amberforge","Axebreaker","Axebringer","Balderk","Barrowdelve","Battleborn","Battlehammer","Blackanvil","Blackaxe","Blackdelve",
+      "Blackforge","Blackiron","Blackstone","Bloodfist","Bloodstone","Boldaxe","Boulderbeard","Bronzehammer","Brownbottle","Bronzebeard",
+      "Chainbreaker","Coppervein","Craghelm","Coppershield","Darkdelve","Deephammer","Deepmaw","Deepvein","Diamonddelve","Dragonbane",
+      "Earthborn","Emberfist","Emberforge","Emberheart","Fardelver","Fireforge","Fireheart","Firethane","Flintbreaker","Flintforge",
+      "Frostbeard","Frostdelver","Frostgrip","Gemcutter","Goldanvil","Goldbeard","Goldbreaker","Goldenshield","Goldfist","Goldforge",
+      "Granitefist","Granitegrip","Granitemaw","Gravelmaw","Graydelver","Grayfist","Grayforge","Grayheart","Grayshard","Hammerfall",
+      "Hammerfist","Hammergrim","Hardaxe","Hardhelm","Hardshield","Heavyhand","Ironanvil","Ironaxe","Ironbeard","Ironbreaker","Ironfist",
+      "Ironfoot","Ironforge","Ironside","Ironsong","Ironthane","Mithrilheart","Oakenshield","Orcslayer","Orebreaker","Orethane",
+      "Rockdelver","Rockfist","Rockforge","Rockhammer","Runeaxe","Runebreaker","Runefist","Runehammer","Silveranvil","Silveraxe",
+      "Silverbeard","Silverfist","Silverforge","Steelbreaker","Steelheart","Stoneanvil","Stoneaxe","Stonebeard","Stonefist","Stoneshield"
+    ]
+  },
+
+  Halfling: {
+    first: [
+      "Alton","Ander","Andry","Bree","Callie","Carlin","Corrin","Dalla","Dannad","Davos",
+      "Del","Eida","Elly","Finnan","Garret","Gemma","Hilda","Horan","Jilly","Kip",
+      "Lavinia","Lyle","Malric","Marigold","Merric","Milo","Mirabel","Nedda","Osborn","Poppy",
+      "Portia","Reed","Roscoe","Rosie","Samlin","Seraphine","Shandy","Tam","Tilda","Tobin",
+      "Travis","Verna","Wellby","Whit","Wilfred","Willow","Yanna","Yonnie","Zilla","Zorim"
+    ],
+    last: [
+      "Appleblossom","Barleybrew","Brushgather","Caskbow","Cinderglow","Dapplefoot","Dimplemark","Dovecote","Fairbarrel","Featherbloom",
+      "Fiddlewick","Figgins","Foxglove","Goodbarrel","Greenbottle","Greenhill","Greenleaf","Highfield","Hilltopple","Honeydew",
+      "Kettlewhistle","Leagallow","Lightfoot","Littlebranch","Longriver","Maplethorn","Merribow","Mournhill","Nettlebrook","Oakbottom",
+      "Pinewhistle","Proudmeadow","Quickstep","Reedbank","Rivershine","Rosethorn","Sandypath","Shortbarrel","Silverstream","Springvale",
+      "Stoutman","Stronghill","Sunmeadow","Tealeaf","Thornburrow","Underbough","Warmglow","Willowbank","Windwhistle","Woodbrook"
+    ]
+  },
+
+  Gnome: {
+    first: [
+      "Albie","Boddynock","Brocc","Calla","Carlin","Dabbledob","Dinky","Duvamil","Ellyjobell","Fenthwick",
+      "Fonkin","Gimble","Glim","Jebeddo","Kellen","Lilli","Loopmottin","Mardnab","Nackle","Nyx",
+      "Orla","Oruq","Paggen","Penni","Quill","Rell","Roondar","Roywyn","Sabra","Sapply",
+      "Seepli","Seraphine","Sprocket","Takwin","Tana","Tervaround","Trilli","Umber","Veblen","Wendel",
+      "Wizzle","Yebli","Yondal","Yuli","Zamfir","Zanna","Zook","Zubrin","Zylia","Zyppo"
+    ],
+    last: [
+      "Beren","Bimpnottin","Bonkin","Cobblelob","Daergel","Dapplechain","Fiddlefen","Filchbatter","Folkor","Garrick",
+      "Gimlen","Glinwizzle","Goldwhistle","Gozzlenock","Higglebottom","Hollowthorn","Ironbadge","Leffery","Lightbender","Loopwhistle",
+      "Miggledob","Murnig","Nacklewhip","Ningle","Ningelblip","Obertick","Quillsharp","Ribblesnap","Rumblestone","Scheppen",
+      "Shattertock","Sprocketgear","Steamwhistle","Stumbleduck","Timbers","Tinkerspark","Tombletoss","Tosscobble","Trickwhistle","Turen",
+      "Underburrow","Waggletock","Warmwhistle","Weaverdob","Wizzleblast","Yebberton","Zabble","Zanderflip","Zigglenock","Zumblebelly"
+    ]
+  },
+
+  "Half-Orc": {
+    first: [
+      "Ardak","Bagrash","Brakka","Brug","Dargol","Drakha","Dulgar","Ghor","Grash","Grunka",
+      "Harza","Igra","Jarga","Kaarg","Korga","Lurkh","Marga","Morgash","Norga","Ogrin",
+      "Orgha","Ragha","Ruk","Sharn","Thokk","Thorga","Urgan","Varka","Yazga","Zorak"
+    ],
+    last: [
+      "Axehand","Battlehide","Blackfang","Bloodfist","Bonecrusher","Doomjaw","Fangbreaker","Firehide","Gorefang","Grimtusk",
+      "Ironhide","Jaggedmaw","Killfist","Longfang","Nightscar","One-Eye","Rageborn","Rattlebone","Redtusk","Scarhide",
+      "Shadowfang","Skullsplitter","Steeljaw","Stonegrip","Thundermaw","Tuskgore","Warbane","Warfang","Wrathfist","Zorblood"
+    ]
+  },
+
+  Tiefling: {
+    first: [
+      "Akmenos","Amara","Anakis","Barakas","Bryseis","Caim","Calista","Damakos","Damaia","Ekemon",
+      "Eos","Iados","Inferna","Jezebel","Kairon","Kasia","Leucis","Lilith","Malachi","Melinoe",
+      "Mordai","Naamah","Orianna","Phelaia","Raziel","Seraphine","Thamior","Valafar","Xaphan","Zepar"
+    ],
+    last: [
+      "Ashbane","Blackstar","Bloodborn","Cindertail","Darkflame","Doomfire","Duskwraith","Emberbane","Fellstar","Flamebrand",
+      "Gloomveil","Hellborn","Hellbrand","Hornshade","Infernis","Ironflame","Maleborn","Nightflame","Onyxshade","Pitborn",
+      "Redflame","Shadowborn","Sinveil","Skullflame","Soulbrand","Starbane","Voidflame","Warflame","Whisperveil","Wrathbrand"
+    ]
+  },
+    Dragonborn: {
+    first: [
+      "Arjhan","Balasar","Bharash","Donaar","Ghesh","Heskan","Kriv","Medrash","Mehen","Nadarr",
+      "Pandjed","Patrin","Rhogar","Shamash","Tarhun","Torinn","Zedaar","Akra","Kava","Mishann",
+      "Nala","Raiann","Sora","Surina","Thava","Uadjit","Vezera","Aravax","Baeshra","Dreyan",
+      "Gharin","Ildrex","Jarana","Kerdax","Myastan","Nysser","Ophin","Pyra","Qezeth","Ravaxan",
+      "Saryx","Thariv","Utherix","Vrak","Wuldrin","Xharin","Yrdum","Zephyra","Zorvath","Zarkhil"
+    ],
+    last: [
+      "Ashwing","Emberscale","Ironscale","Stonescale","Stormclaw","Firebrand","Frostbreath","Nightscale","Brightcrest","Thundercrest",
+      "Cindermaw","Flamevein","Stormsunder","Skysunder","Stormbreath","Steelclaw","Shadowcoil","Sunscale","Mooncrest","Starfury",
+      "Redmaw","Goldenscale","Silverspine","Bronzeclaw","Obsidianfang","Onyxcrest","Jadecoil","Sapphirebreath","Topazflare","Rubybrand",
+      "Amethystgaze","Quartzscale","Embercrest","Drakeshadow","Flameheart","Coldscale","Voidscale","Duskwing","Dawnwing","Skybreaker",
+      "Stonewing","Cloudpiercer","Seabreath","Ironflame","Thunderhide","Riftjaw","Lavaheart","Glacierfang","Stormbloom","Emberstorm"
+    ]
+  },
+  // High Elf (midlertidigt samme navne som Elf – kan tilpasses)
+"High Elf": {
+  first: [
+    "Aelar","Aenwyn","Aerin","Aerith","Althaea","Amaranth","Amriel","Anarion","Arannis","Aredhel",
+    "Arlen","Arwen","Belanor","Belwyn","Caladrel","Calithil","Celandine","Celemir","Celwyn","Cirdan",
+    "Daelis","Daenor","Delanil","Delwyn","Dior","Elandra","Elenion","Elenya","Elian","Elira",
+    "Elorin","Elyndra","Eowyn","Erannis","Erevan","Faelar","Faelyn","Falael","Falon","Fenian",
+    "Galadrel","Galathil","Galen","Gilrael","Gilwen","Haemir","Haldir","Haleth","Ilyndra","Iltharion",
+    "Imloth","Irime","Isilwen","Ithil","Kaelen","Kaeriel","Kelathil","Kelwyn","Laerwen","Lethariel",
+    "Lirael","Luthien","Maeglin","Maeral","Maewen","Melwas","Merenwen","Mirthal","Mithrellas","Myrddin",
+    "Naeris","Naivara","Nenya","Nimriel","Niniel","Olorin","Ondine","Orophin","Oryl","Phyrra",
+    "Quelenna","Quelmar","Quenya","Raelith","Rhovaniel","Saelith","Serelith","Sylwen","Taenya","Thaelion",
+    "Thalindra","Thalion","Thranduil","Tinuviel","Vaelion","Vanya","Yavanna","Yllairies","Ysolde","Zaleria"
+  ],
+  last: [
+    "Aelrath","Amastacia","Amarion","Aranel","Aravath","Auvyann","Baelthorn","Belanoril","Brightsong","Caerthian",
+    "Calarel","Celethil","Celorin","Cindralis","Crystalis","Daelwyn","Dawnwhisper","Dhorlas","Duskwillow","Elandriel",
+    "Elarion","Elenath","Ellarian","Erevath","Evenwood","Faenoris","Faethorn","Firael","Florindral","Galathorn",
+    "Gildurien","Glynrael","Halethorn","Helyanwë","Ilmarith","Ilrien","Immeral","Isilvaris","Ithildor","Kaelthas",
+    "Kelathorn","Kelmaris","Larethian","Letharion","Lhoris","Liraeth","Lithanar","Lorindral","Lutharos","Melwasar",
+    "Miraethis","Mithdoren","Moonbrook","Moonwhisper","Naelrith","Neldoriel","Nightbreeze","Nightstar","Norvalis","Olorath",
+    "Ondelith","Orelindar","Orithal","Orowen","Phirael","Phyrelis","Quelenath","Quillathe","Raelthorn","Rhovanis",
+    "Saelvath","Selthariel","Shaelthas","Shalandar","Silverbough","Silverfrond","Silverleaf","Starbreeze","Starfall","Starlith",
+    "Sylvaris","Taelwyn","Thaelindar","Thalethis","Thrandarin","Tinuvalis","Ulmaril","Uthariel","Vaelthas","Vanyarion",
+    "Velarion","Veylath","Windwhisper","Wynvaris","Yelrath","Ysilwen","Ythariel","Zalethorn","Zhaeril","Ziltharion"
+  ]
+},
+
+// Wood Elf (midlertidigt samme sæt – kan erstattes med mere natur-prægede senere)
+"Wood Elf": {
+  first: [
+    "Aelar","Aenwyn","Aerin","Aerith","Althaea","Amaranth","Amriel","Anarion","Arannis","Aredhel",
+    "Arlen","Arwen","Belanor","Belwyn","Caladrel","Calithil","Celandine","Celemir","Celwyn","Cirdan",
+    "Daelis","Daenor","Delanil","Delwyn","Dior","Elandra","Elenion","Elenya","Elian","Elira",
+    "Elorin","Elyndra","Eowyn","Erannis","Erevan","Faelar","Faelyn","Falael","Falon","Fenian",
+    "Galadrel","Galathil","Galen","Gilrael","Gilwen","Haemir","Haldir","Haleth","Ilyndra","Iltharion",
+    "Imloth","Irime","Isilwen","Ithil","Kaelen","Kaeriel","Kelathil","Kelwyn","Laerwen","Lethariel",
+    "Lirael","Luthien","Maeglin","Maeral","Maewen","Melwas","Merenwen","Mirthal","Mithrellas","Myrddin",
+    "Naeris","Naivara","Nenya","Nimriel","Niniel","Olorin","Ondine","Orophin","Oryl","Phyrra",
+    "Quelenna","Quelmar","Quenya","Raelith","Rhovaniel","Saelith","Serelith","Sylwen","Taenya","Thaelion",
+    "Thalindra","Thalion","Thranduil","Tinuviel","Vaelion","Vanya","Yavanna","Yllairies","Ysolde","Zaleria"
+  ],
+  last: [
+    "Aelrath","Amastacia","Amarion","Aranel","Aravath","Auvyann","Baelthorn","Belanoril","Brightsong","Caerthian",
+    "Calarel","Celethil","Celorin","Cindralis","Crystalis","Daelwyn","Dawnwhisper","Dhorlas","Duskwillow","Elandriel",
+    "Elarion","Elenath","Ellarian","Erevath","Evenwood","Faenoris","Faethorn","Firael","Florindral","Galathorn",
+    "Gildurien","Glynrael","Halethorn","Helyanwë","Ilmarith","Ilrien","Immeral","Isilvaris","Ithildor","Kaelthas",
+    "Kelathorn","Kelmaris","Larethian","Letharion","Lhoris","Liraeth","Lithanar","Lorindral","Lutharos","Melwasar",
+    "Miraethis","Mithdoren","Moonbrook","Moonwhisper","Naelrith","Neldoriel","Nightbreeze","Nightstar","Norvalis","Olorath",
+    "Ondelith","Orelindar","Orithal","Orowen","Phirael","Phyrelis","Quelenath","Quillathe","Raelthorn","Rhovanis",
+    "Saelvath","Selthariel","Shaelthas","Shalandar","Silverbough","Silverfrond","Silverleaf","Starbreeze","Starfall","Starlith",
+    "Sylvaris","Taelwyn","Thaelindar","Thalethis","Thrandarin","Tinuvalis","Ulmaril","Uthariel","Vaelthas","Vanyarion",
+    "Velarion","Veylath","Windwhisper","Wynvaris","Yelrath","Ysilwen","Ythariel","Zalethorn","Zhaeril","Ziltharion"
+  ]
+},
+
+// Dark Elf (Drow) – du kan senere erstatte med mere "drow-agtige" navne hvis du vil
+"Dark Elf (Drow)": {
+  first: [
+    "Aelar","Aenwyn","Aerin","Aerith","Althaea","Amaranth","Amriel","Anarion","Arannis","Aredhel",
+    "Arlen","Arwen","Belanor","Belwyn","Caladrel","Calithil","Celandine","Celemir","Celwyn","Cirdan",
+    "Daelis","Daenor","Delanil","Delwyn","Dior","Elandra","Elenion","Elenya","Elian","Elira",
+    "Elorin","Elyndra","Eowyn","Erannis","Erevan","Faelar","Faelyn","Falael","Falon","Fenian",
+    "Galadrel","Galathil","Galen","Gilrael","Gilwen","Haemir","Haldir","Haleth","Ilyndra","Iltharion",
+    "Imloth","Irime","Isilwen","Ithil","Kaelen","Kaeriel","Kelathil","Kelwyn","Laerwen","Lethariel",
+    "Lirael","Luthien","Maeglin","Maeral","Maewen","Melwas","Merenwen","Mirthal","Mithrellas","Myrddin",
+    "Naeris","Naivara","Nenya","Nimriel","Niniel","Olorin","Ondine","Orophin","Oryl","Phyrra",
+    "Quelenna","Quelmar","Quenya","Raelith","Rhovaniel","Saelith","Serelith","Sylwen","Taenya","Thaelion",
+    "Thalindra","Thalion","Thranduil","Tinuviel","Vaelion","Vanya","Yavanna","Yllairies","Ysolde","Zaleria"
+  ],
+  last: [
+    "Aelrath","Amastacia","Amarion","Aranel","Aravath","Auvyann","Baelthorn","Belanoril","Brightsong","Caerthian",
+    "Calarel","Celethil","Celorin","Cindralis","Crystalis","Daelwyn","Dawnwhisper","Dhorlas","Duskwillow","Elandriel",
+    "Elarion","Elenath","Ellarian","Erevath","Evenwood","Faenoris","Faethorn","Firael","Florindral","Galathorn",
+    "Gildurien","Glynrael","Halethorn","Helyanwë","Ilmarith","Ilrien","Immeral","Isilvaris","Ithildor","Kaelthas",
+    "Kelathorn","Kelmaris","Larethian","Letharion","Lhoris","Liraeth","Lithanar","Lorindral","Lutharos","Melwasar",
+    "Miraethis","Mithdoren","Moonbrook","Moonwhisper","Naelrith","Neldoriel","Nightbreeze","Nightstar","Norvalis","Olorath",
+    "Ondelith","Orelindar","Orithal","Orowen","Phirael","Phyrelis","Quelenath","Quillathe","Raelthorn","Rhovanis",
+    "Saelvath","Selthariel","Shaelthas","Shalandar","Silverbough","Silverfrond","Silverleaf","Starbreeze","Starfall","Starlith",
+    "Sylvaris","Taelwyn","Thaelindar","Thalethis","Thrandarin","Tinuvalis","Ulmaril","Uthariel","Vaelthas","Vanyarion",
+    "Velarion","Veylath","Windwhisper","Wynvaris","Yelrath","Ysilwen","Ythariel","Zalethorn","Zhaeril","Ziltharion"
+  ]
+},
+
+// Orc (separat fra Half-Orc; bruger pt. samme sæt – udskift frit)
+"Orc": {
+  first: [
+    "Ardak","Bagrash","Brakka","Brug","Dargol","Drakha","Dulgar","Ghor","Grash","Grunka",
+    "Harza","Igra","Jarga","Kaarg","Korga","Lurkh","Marga","Morgash","Norga","Ogrin",
+    "Orgha","Ragha","Ruk","Sharn","Thokk","Thorga","Urgan","Varka","Yazga","Zorak"
+  ],
+  last: [
+    "Axehand","Battlehide","Blackfang","Bloodfist","Bonecrusher","Doomjaw","Fangbreaker","Firehide","Gorefang","Grimtusk",
+    "Ironhide","Jaggedmaw","Killfist","Longfang","Nightscar","One-Eye","Rageborn","Rattlebone","Redtusk","Scarhide",
+    "Shadowfang","Skullsplitter","Steeljaw","Stonegrip","Thundermaw","Tuskgore","Warbane","Warfang","Wrathfist","Zorblood"
+  ]
+},
+};
+// ===================== SLUT: NAME_TABLES =====================
 // PROFESSIONS
 const PROFESSIONS_EN = [
   "Farmer","Fisher","Shepherd","Hunter","Trapper","Forester","Miller","Baker","Butcher","Brewer",
@@ -223,35 +662,35 @@ const APPEARANCE_DA = [
   "Skaldet hoved tatoveret med segl",
   "En pukkelryg",
   "Den ene hånd altid forbundet",
-  "Prikket af små brændemærker",
+  "Har små brændemærker på hele kroppen",
   "Markante høje kindben",
-  "Altid rødmossede kinder",
+  "Har altid rødmossede kinder",
   "Har et kæledyr (rotte/padde/fugl) i lommen",
-  "Halskæde snoret med små knogler",
+  "Bærer en halskæde lavet af små knogler",
   "Altid solbrun hud",
   "Bleg, næsten gennemsigtig hud",
   "Udskåret træprotese som fod",
-  "Krogede, mange gange brækket næse",
-  "Kæmpe overskæg men intet hovedhår",
-  "Et glasøje i mærkelig farve",
-  "Bærer gevir/horn som smykke",
+  "Kroget brækket næse",
+  "Skaldet og kæmpe fuldskæg",
+  "Et glasøje i en mærkelig farve",
+  "Bærer et gevir/horn som smykke",
   "Mangler det ene øre",
   "Små tatoveringer på fingerspidserne",
-  "Sod eller aske smurt på hele tiden",
+  "Altid smuurt ind i sod eller aske",
   "Meget lille og spinkel",
   "Unaturligt høj og ranglet",
-  "Hæs, kronisk hoste",
-  "Lugter altid af fisk",
+  "Hæs og har kronisk hoste",
+  "Lugter altid lidt af fisk",
   "Dekorativ klap for øjet",
   "Tænder farvet blå af bær",
   "Stor vinrød modermærkeplet",
   "Takket ar hen over halsen",
   "Hænderne altid i lommerne",
-  "Hættekappe der drypper selv når tør",
+  "Hættekappe der drypper, selv når personen er tør",
   "Heterokromi (to øjenfarver)",
   "Øret fuldt af ringe",
   "Bærer altid bredskygget hat",
-  "Fedtplam i kinden der aldrig går væk",
+  "Fedtplat på kinden der aldrig går væk",
   "Meget lange negle",
   "Kikkert hænger i en snor om halsen",
   "Tygger altid på en rod",
@@ -263,62 +702,62 @@ const APPEARANCE_DA = [
   "Enorme buskede øjenbryn",
   "Et sår der aldrig heler",
   "Stemme, der knækker i falset",
-  "Støvler altid smurt ind i mudder",
+  "Støvlerder altid er smurt ind i mudder",
   "Tjekker konstant et lommeur",
   "Bærer på en barnedukke",
   "Klynger sig til en medtaget bog",
-  "Arkaneruner tegnet på huden",
-  "Tykt pelsslag uanset årstid",
+  "Arkane runer tegnet på huden",
+  "Tyk pelsjakke uanset årstid",
   "Krans af tørrede urter",
   "Halskæde af tænder",
   "Stok udskåret med runer",
   "Dyb hætte, der skjuler ansigtet",
   "Ar formet som et dyr",
-  "Guldflager skaller af huden",
-  "Hænder der bløder i små rifter",
+  "Skæl af guld",
+  "Hænder med blodige små rifter",
   "Underligt modermærke i panden",
-  "Bælte med klirrende hætteglas",
-  "En fugl følger dem altid",
+  "Bælte med klirrende flasker",
+  "Bliver altid forfulgt af fugle",
   "Tonede brilleglas",
   "Ringe på alle fingre",
   "Kappe der lugter af hav",
   "Alt for store handsker",
   "Bælte der klirrer af nøgler",
   "Øjne der konstant flakker",
-  "En rygsøjle der knager",
+  "En knirkende rygsøjle",
   "Øjne der altid ser våde ud",
   "Stemme som en knivsæg",
-  "Rygsæk dobbelt så stor som dem",
+  "Rygsæk dobbelt som personen selv",
   "Et ar der ser helt friskt ud",
-  "Kraftig eyeliner (også på mænd)",
-  "En enkelt guldtand vises altid",
-  "Øret gennemstukket mange gange",
-  "Skæg flettet i fletninger",
+  "Kraftig eyeliner",
+  "En enkelt guldtand der altid er synlig",
+  "Øre med mange huller",
+  "Flettet skæg",
   "Altid blod under neglene",
   "Bærer en slidt fløjte",
   "Håret fuldt af støv",
   "Rustet, gammelt heltesværd",
   "Rune brændt ind i armen",
-  "Tøj i en farve ingen andre bærer",
+  "Tøj i en farve der altid skiller sig ud",
   "Kroget næse",
-  "Ansigtstørklæde viklet rundt",
+  "Tørklæde viklet rundt om ansigtet",
   "Beskyttelsesbriller på panden",
-  "Læder-halvmaske",
+  "Halvmaske af læder",
   "Giftgrøn læbestift",
   "Permanent vinplet på tøjet",
   "Bæltespænde formet som kranie",
-  "Knækket klenodie de vogter",
+  "Knækket klenodie med stor affektionsværdi",
   "En tørret hånd i bæltet",
   "Små klokker syet i tøjet",
-  "Protese-ben i forkert størrelse",
-  "Hættekant med dyretænder",
+  "Proteseben i en forkert størrelse",
+  "Hættekant lavet af dyretænder",
   "Kåbe der glimter som en stjernehimmel",
   "Snavset blæk på fingerspidser",
   "Friskt syet sår",
   "Mangler de to fortænder",
   "Forbrændt og arret øre",
   "Fingerløse handsker året rundt",
-  "Lugt af ozon følger dem",
+  "Lugt af ozon der følger personen",
   "Svagt glødende tatovering",
   "Hår flettet med kobbertråd",
   "Små stjernetegn tatoveret",
@@ -1133,7 +1572,45 @@ function displayGenderFor(race, gender, tr, lang = "en") {
   const dict = GENDER_LABELS[lang] || GENDER_LABELS.en;
   return dict[gender] ?? gender; // fallback til rå værdi hvis ukendt
 }
+
+function displayAgeGender(age, race, gender, tr, lang) {
+  const g = displayGenderFor(race, gender, tr, lang);
+  if (!age) return g;
+  return lang === "da"
+    ? `${age} årig ${g.toLowerCase()}`
+    : `${age} year old ${g.toLowerCase()}`;
+}
+
 // ===================== SLUT: displayGenderFor (med sprog) =====================
+
+// ---------- EN PROMPT: slå altid op i EN-tabeller ----------
+function toEnglish(val, kind) {
+  if (!val) return "";
+  const PAIRS = {
+    profession: [PROFESSIONS_DA, PROFESSIONS_EN],
+    appearance: [APPEARANCE_DA, APPEARANCE_EN],
+    movement:   [MOVEMENT_DA,   MOVEMENT_EN],
+    demeanor:   [DEMEANOR_DA,   DEMEANOR_EN],
+    persona:    [PERSONA_DA,    PERSONA_EN],
+    trait:      [TRAIT_DA,      TRAIT_EN],
+    speech:     [SPEECH_DA,     SPEECH_EN],
+    pitch:      [PITCH_DA,      PITCH_EN],
+  };
+  const pair = PAIRS[kind];
+  if (!pair) return String(val);
+
+  const [DA, EN] = pair;
+
+  // 1) Hvis værdien findes på dansk, returnér den engelske på samme indeks
+  const iDa = DA.indexOf(val);
+  if (iDa !== -1 && EN[iDa]) return EN[iDa];
+
+  // 2) Hvis værdien allerede er engelsk, behold den
+  if (EN.includes(val)) return val;
+
+  // 3) Fallback: returnér original
+  return String(val);
+}
 
 /** =========================================================
  *  Races (weighted)
@@ -1163,17 +1640,22 @@ const roll = (arr, fallback = "") => {
   return arr[Math.floor(Math.random() * arr.length)];
 };
 
-const FIRST_MALE = ["Alric","Tomas","Cedric","Willem","Marcus","Victor","Joran","Edric","Rowan","Gareth"];
-const FIRST_FEMALE = ["Elira","Selene","Mara","Fiona","Katarina","Isolde","Lydia","Clara","Helena","Amelia"];
-const SURNAMES = ["Blackwood","Fairweather","Ravenshadow","Ashford","Thorne","Hawke","Kingsley","Storme","Flint","Hartwell"];
-
 function generateName(race, gender) {
-  const firstPool =
-    gender === "Female" ? FIRST_FEMALE
-    : gender === "Male"   ? FIRST_MALE
-    : [...FIRST_MALE, ...FIRST_FEMALE];
-  const first = roll(firstPool);
-  const last = roll(SURNAMES);
+  const key = normalizeRaceToNameKey(race);
+
+  // Half-Elf: mix af Human/Elf
+  if (key === "Half-Elf") {
+    const firstMix = [...(NAME_TABLES.Human?.first || []), ...(NAME_TABLES.Elf?.first || [])];
+    const lastMix  = [...(NAME_TABLES.Human?.last  || []), ...(NAME_TABLES.Elf?.last  || [])];
+    const first = roll(firstMix.length ? firstMix : (NAME_TABLES.Human?.first || []));
+    const last  = roll(lastMix.length  ? lastMix  : (NAME_TABLES.Human?.last  || []));
+    return `${first} ${last}`;
+  }
+
+  // Normalracer
+  const table = NAME_TABLES[key] || NAME_TABLES.Human;
+  const first = roll(table.first);
+  const last  = roll(table.last);
   return `${first} ${last}`;
 }
 
@@ -1233,16 +1715,18 @@ function raceDescriptor(race) {
 }
 
 function buildMidjourneyPromptWeb(npc) {
+  // Køn på engelsk uanset UI
   const genderOut = displayGenderFor(npc.race, npc.gender, t.en);
+
   const parts = [
     "fantasy character portrait, head & shoulders, D&D style",
-   `${raceDescriptor(npc.race)}, ${genderOut} ${npc.profession}`,
-    `${npc.demeanor}`,
-    ` ${npc.appearance}`,
-    
-    ` ${npc.movement}`,
-    "rich lighting, photorealistic, painterly detail, sharp focus, neutral background, subtle costume matching the role, color harmony, (no modern items), (no text)"
-  ];
+    `${raceDescriptor(npc.race)}, ${npc.age ? `${npc.age} year old ` : ""}${genderOut}${npc.ageLabel ? ` (${npc.ageLabel})` : ""} ${toEnglish(npc.profession, "profession")}`,
+    `${toEnglish(npc.demeanor, "demeanor")}`,
+    `${toEnglish(npc.appearance, "appearance")}`,
+    `${toEnglish(npc.movement, "movement")}`,
+    "rich lighting, photorealistic, painterly detail, sharp focus, neutral background, subtle costume matching the role, color harmony, (no modern items), (no text)",
+  ].filter(Boolean);
+
   const seed = seedFromString(npc.name || `${npc.race}-${npc.profession}`);
   return `${parts.join(", ")} --ar 2:3 --v 6 --style raw --s 250 --seed ${seed}`;
 }
@@ -1412,18 +1896,24 @@ useEffect(() => {
       const p = roll(tables.pitch);
       return `${s} ${p}`;
     };
-    const seed = {
-      name:       generateName("Human", "Male"),
-      gender:     weightedGender(),
-      race:       weightedRoll(races, raceWeights),
-      profession: roll(tables.professions),
-      appearance: roll(tables.appearances),
-      voice:      buildVoiceInit(),
-      movement:   roll(tables.movement),
-      demeanor:   roll(tables.demeanor),
-      persona:    roll(tables.persona),
-      trait:      roll(tables.trait),
-    };
+const seedGender = weightedGender();
+const seedRace   = weightedRoll(races, raceWeights);
+const { age: seedAge, label: seedAgeLabel } = rollAgeByRace(seedRace);
+
+const seed = {
+  name:       generateName(seedRace, seedGender),
+  gender:     seedGender,
+  age:        seedAge,           // alder (tal)
+  ageLabel:   seedAgeLabel,      // "youthful" | "middle-aged" | "elderly" | "ancient"
+  race:       seedRace,
+  profession: roll(tables.professions),
+  appearance: roll(tables.appearances),
+  voice:      buildVoiceInit(),
+  movement:   roll(tables.movement),
+  demeanor:   roll(tables.demeanor),
+  persona:    roll(tables.persona),
+  trait:      roll(tables.trait),
+};
     setHistory([seed]);
     setCurrentIndex(0);
   }
@@ -1447,57 +1937,90 @@ useEffect(() => {
     return `${s} ${p}`;
   };
 
-  const generateAll = (locks, tables, prev) => {
-    const gender = locks?.gender && prev ? prev.gender : weightedGender();
-    const race   = locks?.race   && prev ? prev.race   : weightedRoll(races, raceWeights);
-    return {
-      name:       locks?.name       && prev ? prev.name       : generateName(race, gender),
-      gender,
-      race,
-      profession: locks?.profession && prev ? prev.profession : roll(tables.professions),
-      appearance: locks?.appearance && prev ? prev.appearance : roll(tables.appearances),
-      voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),
-      movement:   locks?.movement   && prev ? prev.movement   : roll(tables.movement),
-      demeanor:   locks?.demeanor   && prev ? prev.demeanor   : roll(tables.demeanor),
-      persona:    locks?.persona    && prev ? prev.persona    : roll(tables.persona),
-      trait:      locks?.trait      && prev ? prev.trait      : roll(tables.trait),
-    };
+const generateAll = (locks, tables, prev) => {
+  const gender = locks?.gender && prev ? prev.gender : weightedGender();
+  const race   = locks?.race   && prev ? prev.race   : weightedRoll(races, raceWeights);
+
+  // Alder og label håndteres sammen. Hvis alder er låst, behold tallet men sync label til ny race.
+  let age, ageLabel;
+  if (locks?.age && prev) {
+    age = prev.age;
+    ageLabel = labelForAge(race, age);
+  } else {
+    const a = rollAgeByRace(race);
+    age = a.age;
+    ageLabel = a.label;
+  }
+
+  return {
+    name:       locks?.name       && prev ? prev.name       : generateName(race, gender),
+    gender,
+    age,
+    ageLabel,   // <-- NYT
+    race,
+    profession: locks?.profession && prev ? prev.profession : roll(tables.professions),
+    appearance: locks?.appearance && prev ? prev.appearance : roll(tables.appearances),
+    voice:      locks?.voice      && prev ? prev.voice      : buildVoice(tables),
+    movement:   locks?.movement   && prev ? prev.movement   : roll(tables.movement),
+    demeanor:   locks?.demeanor   && prev ? prev.demeanor   : roll(tables.demeanor),
+    persona:    locks?.persona    && prev ? prev.persona    : roll(tables.persona),
+    trait:      locks?.trait      && prev ? prev.trait      : roll(tables.trait),
   };
+};
 
   const rerollAll = (locks, tables) => {
     const next = generateAll(locks, tables, npc);
     push(next);
   };
 
-  const rerollField = (fieldKey, locks, tables) => {
-    const prev = npc;
-    if (!prev) return;
-    if (locks?.[fieldKey]) return;
+const rerollField = (fieldKey, locks, tables) => {
+  const prev = npc;
+  if (!prev) return;
+  if (locks?.[fieldKey]) return;
 
-    const next = { ...prev };
-    if (fieldKey === "gender") {
-      next.gender = weightedGender();
-      if (!locks?.name) next.name = generateName(next.race, next.gender);
-    } else if (fieldKey === "race") {
-      next.race = weightedRoll(races, raceWeights);
-      if (!locks?.name) next.name = generateName(next.race, next.gender);
-    } else if (fieldKey === "name") {
-      next.name = generateName(prev.race, prev.gender);
-    } else if (fieldKey === "voice") {
-      next.voice = buildVoice(tables);
+  const next = { ...prev };
+
+  if (fieldKey === "gender") {
+    next.gender = weightedGender();
+    if (!locks?.name) next.name = generateName(next.race, next.gender);
+
+  } else if (fieldKey === "race") {
+    next.race = weightedRoll(races, raceWeights);
+    if (!locks?.age) {
+      const a = rollAgeByRace(next.race);
+      next.age = a.age;
+      next.ageLabel = a.label;
     } else {
-      const source = {
-        profession: tables.professions,
-        appearance: tables.appearances,
-        movement:   tables.movement,
-        demeanor:   tables.demeanor,
-        persona:    tables.persona,
-        trait:      tables.trait,
-      }[fieldKey];
-      if (Array.isArray(source)) next[fieldKey] = roll(source);
+      // alder låst: opdater label, så den passer relativt til ny race
+      next.ageLabel = labelForAge(next.race, next.age);
     }
-    push(next);
-  };
+    if (!locks?.name) next.name = generateName(next.race, next.gender);
+
+  } else if (fieldKey === "age") {
+    const a = rollAgeByRace(prev.race);
+    next.age = a.age;
+    next.ageLabel = a.label;
+
+  } else if (fieldKey === "name") {
+    next.name = generateName(prev.race, prev.gender);
+
+  } else if (fieldKey === "voice") {
+    next.voice = buildVoice(tables);
+
+  } else {
+    const source = {
+      profession: tables.professions,
+      appearance: tables.appearances,
+      movement:   tables.movement,
+      demeanor:   tables.demeanor,
+      persona:    tables.persona,
+      trait:      tables.trait,
+    }[fieldKey];
+    if (Array.isArray(source)) next[fieldKey] = roll(source);
+  }
+
+  push(next);
+};
 
   const undo = () => { if (canUndo) setCurrentIndex((i) => i - 1); };
   const redo = () => { if (canRedo) setCurrentIndex((i) => i + 1); };
@@ -1527,11 +2050,11 @@ export default function DnDNpcGenerator() {
   const tr = t[lang];
   const tables = useMemo(() => getTables(lang), [lang]);
 
-  const [locks, setLocks] = useState({
-    name: false, gender: false, race: false, profession: false,
-    appearance: false, voice: false, movement: false, demeanor: false,
-    persona: false, trait: false,
-  });
+ const [locks, setLocks] = useState({
+  name: false, gender: false, age: false, race: false, profession: false,
+  appearance: false, voice: false, movement: false, demeanor: false,
+  persona: false, trait: false,
+});
 
   const { npc, rerollAll, rerollField, undo, redo, canUndo, canRedo, replaceCurrent } = useNPC();
 
@@ -1572,7 +2095,7 @@ export default function DnDNpcGenerator() {
   const textOut = useMemo(() => {
     if (!npc) return "";
     return `${tr.fields.name}: ${npc.name}
-${tr.fields.gender}: ${displayGenderFor(npc.race, npc.gender, tr, lang)}
+${tr.fields.gender}: ${displayAgeGender(npc.age, npc.race, npc.gender, tr, lang)}
 ${tr.fields.race}: ${npc.race}
 ${tr.fields.profession}: ${npc.profession}
 ${tr.fields.appearance}: ${npc.appearance}
@@ -1611,18 +2134,18 @@ const handleOpenPerchance = () => {
  // Global lock/unlock
 const lockAll = () => {
   setLocks({
-    name: true, gender: true, race: true, profession: true,
-    appearance: true, voice: true, movement: true, demeanor: true,
-    persona: true, trait: true,
-  });
+  name: true, gender: true, age: true, race: true, profession: true,
+  appearance: true, voice: true, movement: true, demeanor: true,
+  persona: true, trait: true,
+});
 };
 
 const unlockAll = () => {
-  setLocks({
-    name: false, gender: false, race: false, profession: false,
-    appearance: false, voice: false, movement: false, demeanor: false,
-    persona: false, trait: false,
-  });
+setLocks({
+  name: false, gender: false, age: false, race: false, profession: false,
+  appearance: false, voice: false, movement: false, demeanor: false,
+  persona: false, trait: false,
+});
 };
 
 // Reroll alle felter (respekterer locks)
@@ -1694,6 +2217,8 @@ return (
       </div>
 
       {/* Header med centreret tekst */}
+      
+
 <header className="text-center">
   {/* Titel */}
   <h1 className="text-5xl font-bold text-indigo-400 drop-shadow-lg tracking-wide">
@@ -1714,10 +2239,29 @@ return (
   </p>
 </header>
 
+{/* Rul-knap under titel */}
+<div className="mt-10 flex justify-center">
+  <button
+    className="px-6 py-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 font-bold shadow flex items-center"
+    onClick={() => rerollAll(locks, tables)}
+    title={tr.buttons.roll}
+  >
+    <Shuffle className="w-4 h-4 inline mr-2" />
+    {tr.buttons.roll}
+  </button>
+</div>
+
       {/* Grid med NPC-felter */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FieldCard label={tr.fields.name} value={npc.name} locked={locks.name} onLock={() => toggleLock("name")} onReroll={() => rerollField("name", locks, tables)} tr={tr} />
-        <FieldCard label={tr.fields.gender} value={displayGenderFor(npc.race, npc.gender, tr, lang)} locked={locks.gender} onLock={() => toggleLock("gender")} onReroll={() => rerollField("gender", locks, tables)} tr={tr} />
+        <FieldCard
+  label={tr.fields.gender}
+  value={displayAgeGender(npc.age, npc.race, npc.gender, tr, lang)}
+  locked={locks.gender}
+  onLock={() => toggleLock("gender")}
+  onReroll={() => rerollField("gender", locks, tables)}
+  tr={tr}
+/>
         <FieldCard label={tr.fields.race} value={npc.race} locked={locks.race} onLock={() => toggleLock("race")} onReroll={() => rerollField("race", locks, tables)} tr={tr} />
         <FieldCard label={tr.fields.profession} value={npc.profession} locked={locks.profession} onLock={() => toggleLock("profession")} onReroll={() => rerollField("profession", locks, tables)} tr={tr} />
         <FieldCard label={tr.fields.appearance} value={npc.appearance} locked={locks.appearance} onLock={() => toggleLock("appearance")} onReroll={() => rerollField("appearance", locks, tables)} tr={tr} />
@@ -1732,14 +2276,17 @@ return (
       <section className="space-y-4 text-center">
 
         {/* Rul! */}
-        <div>
-          <button
-            className="px-6 py-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 font-bold"
-            onClick={() => rerollAll(locks, tables)}
-          >
-            {tr.buttons.roll}
-          </button>
-        </div>
+       {/* Rul! */}
+<div className="mt-10 flex justify-center">
+  <button
+    className="px-6 py-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 font-bold shadow flex items-center"
+    onClick={() => rerollAll(locks, tables)}
+    title={tr.buttons.roll}
+  >
+    <Shuffle className="w-4 h-4 inline mr-2" />
+    {tr.buttons.roll}
+  </button>
+</div>
 
         {/* Fortryd / Gendan */}
         <div className="flex justify-center gap-2">
